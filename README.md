@@ -66,11 +66,21 @@ Aucun `npm install` : le studio n'a pas de dépendance. Ta bibliothèque
 Dans la colonne **Effets**, choisis un effet et clique **Ajouter**. L'aperçu se
 place automatiquement sur un moment où l'effet est visible.
 
+Le menu est classé en trois familles : **Textes**, **Animations**, **Image**.
+
 | Effet | Ce qu'il fait |
 |---|---|
 | **Texte derrière moi** | le texte passe derrière ta tête et tes épaules |
 | **Titre devant** | titre animé au-dessus de l'image (haut, centre, bas, sous le menton) |
 | **Bandeau (lower third)** | nom et fonction en bas à gauche |
+| **Titre surligné** | un coup de surligneur (ou un soulignement, un encadré) passe derrière la phrase |
+| **Mots-clés percutants** | des mots qui claquent l'un après l'autre — sépare-les par « / » |
+| **Liste à puces** | une carte dont les points apparaissent un à un |
+| **Compteur animé** | un chiffre qui défile jusqu'à sa valeur (« +250 % »), avec une légende |
+| **Flèche animée** | une flèche se dessine vers un point de l'image, avec une étiquette |
+| **Barre de progression** | une fine barre qui se remplit au fil du clip |
+| **Bouton d'appel à l'action** | « Abonne-toi », « Lien en commentaire »… surgit puis pulse |
+| **Logo** | le logo de ta charte dans un coin |
 | **Étalonnage** | exposition, contraste, saturation, température |
 | **Flou d'arrière-plan** | floute la pièce, te garde net |
 | **Remplacer l'arrière-plan** | remplace la pièce derrière toi par ton image, un dégradé ou une couleur |
@@ -81,6 +91,24 @@ place automatiquement sur un moment où l'effet est visible.
 
 Chaque effet se règle dans sa carte. **Tape sur son titre pour le renommer.**
 La case à cocher l'active ou le désactive, `×` le retire.
+
+Les textes (**Texte derrière moi**, **Titre devant**) ont un réglage
+**Animation** : Flou montant, Rebond, Glissement, Machine à écrire, Mot par mot,
+Balayage.
+
+### Ta charte graphique
+
+L'onglet **Charte graphique** (en haut à droite) définit tes chartes : quatre
+couleurs (principale, secondaire, texte, fond), une police pour les titres et
+une pour les textes, et ton logo. Les polices du Mac sont proposées d'office ;
+**Importer une police…** accepte WOFF2, WOFF, TTF ou OTF (par exemple
+téléchargée depuis Google Fonts).
+
+Chaque projet choisit sa charte dans la barre **Charte**, au-dessus de
+l'aperçu. Dans un effet, les **pastilles** à côté d'une couleur la lient à la
+charte : elle suit alors chaque changement de la charte. Le sélecteur de
+couleur, lui, fixe une couleur libre. Les titres, bandeaux et animations
+prennent les polices de la charte ; l'élément **Logo** prend son logo.
 
 ### Remplacer l'arrière-plan
 

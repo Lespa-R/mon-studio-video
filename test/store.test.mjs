@@ -24,7 +24,7 @@ test("v1 — a flat list of clips — is wrapped in a project, nothing lost", as
   const { file } = await tmpFile(JSON.stringify({ videos: [{ id: "vid_a", effects: [] }] }));
   const store = new Store(file);
   await store.load();
-  assert.equal(store.state.version, 5);
+  assert.equal(store.state.version, 6);
   assert.equal(store.state.projects[0].videos[0].id, "vid_a");
   assert.equal(store.state.projects[0].format.aspect, "source");
 });
@@ -152,4 +152,37 @@ test("v4 keeps the format a project had, and drops its sequence", async () => {
   assert.equal(project.format.aspect, "9:16");
   assert.equal(project.format.size, 1080);
   assert.equal(project.sequence, undefined);
+});
+
+test("v5 projects gain the default brand kit on migration", async () => {
+  const { file } = await tmpFile(JSON.stringify({
+    version: 5, projects: [{ id: "p", name: "P", videos: [], format: { aspect: "9:16" } }],
+  }));
+  const store = new Store(file);
+  await store.load();
+  assert.equal(store.state.projects[0].brandId, null);
+  assert.deepEqual(store.state.brands, []);
+  assert.equal(store.brandOf(store.project("p")).name, "Studio (par défaut)");
+});
+
+test("a brand kit keeps only valid colours and fonts, and its projects survive its deletion", async () => {
+  const { file } = await tmpFile();
+  const store = new Store(file);
+  await store.load();
+  const brand = store.addBrand("Client A");
+  store.updateBrand(brand.id, {
+    colors: { primary: "#FF0055", text: "not a colour" },
+    fonts: { title: "Futura", body: "file:../../../etc/passwd" },
+  });
+  assert.equal(brand.colors.primary, "#ff0055");
+  assert.equal(brand.colors.text, "#ffffff");
+  assert.equal(brand.fonts.title, "Futura");
+  assert.equal(brand.fonts.body, "system");
+
+  const project = store.activeProject();
+  project.brandId = brand.id;
+  assert.equal(store.snapshot([]).brand.name, "Client A");
+  store.removeBrand(brand.id);
+  assert.equal(project.brandId, null);
+  assert.equal(store.snapshot([]).brand.name, "Studio (par défaut)");
 });

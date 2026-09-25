@@ -37,12 +37,14 @@ npm run check    # HyperFrames lint of index.html (= last rendered composition)
 ```
 server/server.mjs      HTTP + JSON API, zero dependencies; preview player; render queue
 server/ui/index.html   the whole UI (vanilla JS, no build)
-lib/effects.mjs        graphics effects + registry          ← add effects here
+lib/effects.mjs        text effects, TEXT_ANIMS + registry  ← add effects here
+lib/effects-anim.mjs   animated elements (canvas space)     ← or here
 lib/effects-image.mjs  image treatments (filters, grain…)   ← or here
+lib/brand.mjs          brand kits: colour tokens, fonts, logo (pure)
 lib/compose.mjs        clip + effects + format → HyperFrames HTML (pure)
 lib/format.mjs         output canvas, and how the clip is placed on it (pure)
 lib/timing.mjs         an effect's window on the clip (pure)
-lib/store.mjs          studio.json: folders → projects (+format) → clips → effects; presets
+lib/store.mjs          studio.json (v6): folders → projects (+format, brandId) → clips → effects; presets; brands; fonts
 lib/media.mjs          ffprobe, face detection, person matte (async)
 lib/guard.mjs          Host/Origin guard
 tools/*.swift          Vision helpers: facedet (face box), personmatte (cut-out → RGBA)
@@ -53,9 +55,10 @@ docs/ARCHITECTURE.md   the long-form technical reference
 
 ## Adding an effect
 
-Append an object to `EFFECTS` (or `IMAGE_EFFECTS`). The `schema` drives the UI
-controls on its own; the catalogue endpoint and the picker pick it up. Nothing
-else to wire.
+Append an object to `EFFECTS`, `ANIM_EFFECTS` or `IMAGE_EFFECTS`. The `schema`
+drives the UI controls on its own; the catalogue endpoint and the picker pick it
+up, grouped by `category` ("Textes", "Animations", "Image"). Nothing else to
+wire.
 
 ```js
 {
@@ -100,10 +103,16 @@ Rules that keep compositions correct:
   listed values — the UI and the library editor both honour it.
 - **Layers that stand in for the footage** (like `bg-replace`) get the class
   `footage-layer`: `compose.mjs` gives them the clip's grade.
-- **z-index**: bg 1 · replaced background 2 · behind 10–11 · cut-out 50 · tint 55 · front 60–62 ·
+- **z-index**: bg 1 · replaced background 2 · behind 10–11 · cut-out 50 · tint 55 · front 60–62 · animations 63–68 · logo 84 · progress 86 ·
   vignette 80 · grain 82 · bands 88 · fade 90.
 - Image treatments return `filters: { footage: [...], bg: [...] }` instead of
   markup; `compose.mjs` concatenates them per layer.
+- **Brand kit.** Colour params default to tokens (`"brand:primary"`, `"brand:text"`…)
+  and go through `paint()` / `paintAlpha()` from `lib/brand.mjs` — never raw into
+  CSS. Text uses `font-family: var(--font-title)` or `var(--font-body)`. The kit
+  itself reaches `build()` as `video.brand` (the logo effect reads its `logo`).
+- **Placement vs animation transforms**: put a `translate(-50%)` centring on a
+  wrapper and tween the child — a GSAP `x`/`y` tween overwrites the transform.
 
 Then: a test in `test/compose.test.mjs` (at least "builds for a typical clip",
 covered by the catalogue smoke test), a real render checked frame by frame, and

@@ -15,6 +15,7 @@ import { compose, needsMatte } from "../lib/compose.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
+import { SYSTEM_FONTS, COLOR_ROLES, DEFAULT_BRAND } from "../lib/brand.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MEDIA = path.join(ROOT, "media");
@@ -124,6 +125,8 @@ const filesOf = (video) => {
 
 // A clip is previewed and rendered in its project's output format.
 const formatOf = (videoId) => store.locate(videoId).project?.format || {};
+// …and with its project's brand kit.
+const brandOf = (videoId) => store.brandOf(store.locate(videoId).project);
 
 async function writeAtomic(file, contents) {
   const tmp = `${file}.tmp`;
@@ -226,6 +229,7 @@ const MIME = {
   ".json": "application/json", ".mp4": "video/mp4", ".mov": "video/quicktime",
   ".webm": "video/webm", ".m4v": "video/mp4", ".svg": "image/svg+xml",
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+  ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".otf": "font/otf",
 };
 
 // Serve a file with Range support — the browser needs it to scrub video.
@@ -316,14 +320,24 @@ const IMAGE_SIGNATURES = {
   ".webp": (b) => b.length > 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP",
 };
 IMAGE_SIGNATURES[".jpeg"] = IMAGE_SIGNATURES[".jpg"];
+// Fonts for brand kits, stored as font_<hex>.<ext> (FONT_FILE in lib/brand.mjs).
+const FONT_SIGNATURES = {
+  ".woff2": (b) => b.length > 4 && b.toString("ascii", 0, 4) === "wOF2",
+  ".woff": (b) => b.length > 4 && b.toString("ascii", 0, 4) === "wOFF",
+  ".ttf": (b) => b.length > 4 && (b.readUInt32BE(0) === 0x00010000 || b.toString("ascii", 0, 4) === "true"),
+  ".otf": (b) => b.length > 4 && (b.toString("ascii", 0, 4) === "OTTO" || b.readUInt32BE(0) === 0x00010000),
+};
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 
 async function addAsset(req, res) {
   const original = decodeURIComponent(req.headers["x-filename"] || "");
   const ext = path.extname(original).toLowerCase();
-  const looksRight = IMAGE_SIGNATURES[ext];
+  const isFont = Boolean(FONT_SIGNATURES[ext]);
+  const looksRight = IMAGE_SIGNATURES[ext] || FONT_SIGNATURES[ext];
   if (!looksRight) {
-    return send(res, 400, { error: "Format d'image non pris en charge : PNG, JPEG ou WebP." });
+    return send(res, 400, {
+      error: "Format non pris en charge : PNG, JPEG ou WebP pour une image, WOFF2, WOFF, TTF ou OTF pour une police.",
+    });
   }
 
   const chunks = [];
@@ -336,13 +350,24 @@ async function addAsset(req, res) {
     req.on("end", resolve);
     req.on("error", reject);
   });
-  if (size > MAX_IMAGE_BYTES) return send(res, 413, { error: "Image trop lourde : 25 Mo maximum." });
+  if (size > MAX_IMAGE_BYTES) return send(res, 413, { error: "Fichier trop lourd : 25 Mo maximum." });
 
   const bytes = Buffer.concat(chunks);
-  if (!looksRight(bytes)) return send(res, 400, { error: "Ce fichier n'est pas une image valide." });
+  if (!looksRight(bytes)) {
+    return send(res, 400, { error: isFont ? "Ce fichier n'est pas une police valide." : "Ce fichier n'est pas une image valide." });
+  }
 
-  const file = `asset_${crypto.randomBytes(8).toString("hex")}${ext === ".jpeg" ? ".jpg" : ext}`;
+  const prefix = isFont ? "font_" : "asset_";
+  const file = `${prefix}${crypto.randomBytes(8).toString("hex")}${ext === ".jpeg" ? ".jpg" : ext}`;
+  await fsp.mkdir(MEDIA, { recursive: true });
   await fsp.writeFile(path.join(MEDIA, file), bytes);
+  // A font keeps the name it was imported under, for the pickers.
+  if (isFont) {
+    store.state.fonts = [...(store.state.fonts || []), {
+      file, name: path.basename(original, ext).slice(0, 80), addedAt: new Date().toISOString(),
+    }];
+    await saveState();
+  }
   send(res, 200, { file });
 }
 
@@ -369,7 +394,12 @@ async function handleApi(req, res, url) {
   if (section === "state" && req.method === "GET") {
     return send(res, 200, {
       ...store.snapshot(catalogue(), url.searchParams.get("project")),
-      options: { aspects: ASPECTS, sizes: SIZES, fits: FITS, focuses: FOCUSES, fills: FILLS },
+      options: {
+        aspects: ASPECTS, sizes: SIZES, fits: FITS, focuses: FOCUSES, fills: FILLS,
+        fonts: SYSTEM_FONTS.map(({ value, label }) => ({ value, label })),
+        colorRoles: COLOR_ROLES,
+      },
+      defaultBrand: DEFAULT_BRAND,
     });
   }
 
@@ -382,6 +412,28 @@ async function handleApi(req, res, url) {
     }));
     listed.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
     return send(res, 200, { assets: listed });
+  }
+
+  // ------------------------------------------------------ brand kits
+  if (section === "brands") {
+    if (req.method === "POST" && !id) {
+      const { name, from } = await readJson(req);
+      const brand = store.addBrand(name, from);
+      await saveState();
+      return send(res, 200, { brand });
+    }
+    if (req.method === "PATCH" && id) {
+      const body = await readJson(req);
+      const brand = store.updateBrand(id, body);
+      if (!brand) return send(res, 404, { error: "unknown brand" });
+      await saveState();
+      return send(res, 200, { brand });
+    }
+    if (req.method === "DELETE" && id) {
+      store.removeBrand(id);
+      await saveState();
+      return send(res, 200, { ok: true });
+    }
   }
 
   if (section === "jobs" && req.method === "GET") {
@@ -445,6 +497,9 @@ async function handleApi(req, res, url) {
       if (body.name) project.name = String(body.name).slice(0, 80);
       if (body.folderId !== undefined) {
         project.folderId = store.folder(body.folderId) ? body.folderId : null;
+      }
+      if (body.brandId !== undefined) {
+        project.brandId = store.brand(body.brandId) ? body.brandId : null;
       }
       await saveState();
       return send(res, 200, { project });
@@ -655,7 +710,7 @@ async function handleApi(req, res, url) {
       return send(res, 200, {
         job: queueRender({
           name: video.name,
-          html: compose(video, filesOf(video), formatOf(video.id)),
+          html: compose(video, filesOf(video), formatOf(video.id), brandOf(video.id)),
           mattes: needsMatte(video) ? [video] : [],
         }),
       });
@@ -783,7 +838,7 @@ function playable(html) {
 async function servePreview(res, id) {
   const video = findVideo(id);
   if (!video) return send(res, 404, { error: "unknown video" }, "text/plain");
-  send(res, 200, playable(compose(video, filesOf(video), formatOf(video.id))), "text/html");
+  send(res, 200, playable(compose(video, filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
 }
 
 // The library's preview: the clip with this preset as its only effect, so you
@@ -814,7 +869,7 @@ async function servePresetPreview(res, presetId, videoId) {
       params: preset.params,
     }],
   };
-  send(res, 200, playable(compose(solo, filesOf(video), formatOf(video.id))), "text/html");
+  send(res, 200, playable(compose(solo, filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
 }
 
 // ---------------------------------------------------------------- guard

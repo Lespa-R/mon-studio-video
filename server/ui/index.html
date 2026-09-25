@@ -318,6 +318,56 @@
       .warn { color: #ffb454; }
       .none { color: var(--muted); font-size: 13px; padding: 4px 4px 12px; }
       input[type="checkbox"] { accent-color: var(--accent); }
+
+      /* colour field: brand swatches + free colour ------------------------ */
+      .colorpick { display: flex; align-items: center; gap: 5px; min-width: 0; }
+      .colorpick input[type="color"] { width: 38px; flex: 0 0 38px; }
+      .colorpick .sw {
+        width: 22px; height: 22px; flex: 0 0 22px; padding: 0; border-radius: 50%;
+        border: 2px solid var(--line);
+      }
+      .colorpick .sw.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+      .colorpick .tag { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      /* optgroups in the pickers read as section titles */
+      optgroup { font-style: normal; color: var(--muted); }
+
+      /* brand kit page ------------------------------------------------- */
+      main.brandview { grid-template-columns: 230px 380px 1fr; }
+      .brand-editor { display: grid; gap: 14px; align-content: start; padding-top: 2px; }
+      .brand-editor h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-top: 6px; }
+      .brand-editor .name { font-size: 14px; font-weight: 600; }
+      .brand-editor .colors { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .brand-editor .colors label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+      .brand-editor .colors .pair { display: flex; gap: 6px; align-items: center; }
+      .brand-editor .colors input[type="color"] { width: 42px; flex: 0 0 42px; height: 30px; }
+      .brand-editor .colors input[type="text"] { font-family: Menlo, monospace; font-size: 12px; }
+      .brand-editor .fontrow { display: grid; grid-template-columns: 70px 1fr; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+      .brand-editor .fontbtns { display: flex; gap: 6px; }
+      .brand-editor .fontbtns button { font-size: 12px; padding: 5px 9px; }
+      .brand-editor .danger-zone { display: flex; gap: 6px; margin-top: 8px; }
+      .brand-editor .danger-zone button { font-size: 12px; }
+      .brand-editor .readonly { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+      .brand-preview { flex: 1; padding: 16px; overflow: auto; }
+      .brand-card {
+        position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;
+        background: linear-gradient(135deg, #2b3444, #0d1017); border: 1px solid var(--line);
+      }
+      .brand-card .bp-title { position: absolute; left: 0; right: 0; top: 22%; text-align: center;
+        font-weight: 800; letter-spacing: -0.03em; font-size: clamp(22px, 4.2vw, 54px);
+        text-shadow: 0 2px 4px rgba(6,12,22,.5), 0 10px 30px rgba(6,12,22,.45); }
+      .brand-card .bp-lt { position: absolute; left: 5%; bottom: 9%; display: flex; gap: 10px; align-items: stretch; }
+      .brand-card .bp-bar { width: 5px; border-radius: 3px; }
+      .brand-card .bp-body { padding: 9px 16px; border-radius: 8px; }
+      .brand-card .bp-t { font-weight: 700; font-size: clamp(14px, 1.9vw, 24px); line-height: 1.1; }
+      .brand-card .bp-s { font-weight: 500; font-size: clamp(11px, 1.2vw, 15px); opacity: .75; margin-top: 3px; }
+      .brand-card .bp-cta { position: absolute; right: 5%; bottom: 10%; border-radius: 999px;
+        padding: .5em 1em; font-weight: 800; font-size: clamp(12px, 1.4vw, 18px); }
+      .brand-card .bp-logo { position: absolute; right: 4%; top: 6%; width: 12%; aspect-ratio: 1; object-fit: contain; }
+      .brand-swatches { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+      .brand-swatches div { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+      .brand-swatches span { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line); }
+      .brand-note { margin-top: 12px; font-size: 12px; color: var(--muted); line-height: 1.55; }
     </style>
   </head>
   <body>
@@ -327,6 +377,7 @@
       <nav>
         <button id="tab-edit" class="on">Montage</button>
         <button id="tab-lib">Bibliothèque d'effets</button>
+        <button id="tab-brand">Charte graphique</button>
       </nav>
     </header>
 
@@ -350,8 +401,9 @@
       <section class="col">
         <div class="stage">
           <div class="toolbar">
-            <span style="font-size:11.5px;color:var(--muted)">Sortie</span>
+            <label title="La charte graphique de ce projet : couleurs, polices et logo">Charte <select id="f-brand"></select></label>
             <span class="grow"></span>
+            <span style="font-size:11.5px;color:var(--muted)">Sortie</span>
             <label>Format <select id="f-aspect"></select></label>
             <label>Taille <select id="f-size"></select></label>
             <label>Cadrage <select id="f-fit"></select></label>
@@ -432,6 +484,28 @@
           </div>
           <div class="lib-editor" id="lib-editor"></div>
         </div>
+      </section>
+    </main>
+
+    <main id="view-brand" class="brandview" hidden>
+      <section class="col">
+        <h2>Chartes</h2>
+        <div class="tree" id="brand-list"></div>
+        <div class="tree-actions">
+          <button id="new-brand">+ Charte</button>
+        </div>
+        <div class="hint">Chaque projet choisit sa charte dans la barre « Charte » du montage.
+          Les couleurs marquées d'une pastille de charte suivent ses changements.</div>
+      </section>
+
+      <section class="col">
+        <h2>Réglages</h2>
+        <div class="scroll brand-editor" id="brand-editor"></div>
+      </section>
+
+      <section class="col">
+        <h2>Aperçu</h2>
+        <div class="brand-preview" id="brand-preview"></div>
       </section>
     </main>
 
@@ -735,10 +809,35 @@
           holder.appendChild(input); holder.appendChild(box);
           wrap.appendChild(holder);
         } else if (f.type === "color") {
+          // One click links the colour to a role of the project's brand kit
+          // ("brand:primary"…): it then follows the kit. The free picker
+          // unlinks it.
+          const brand = state.brand || { colors: {} };
+          const roles = (state.options && state.options.colorRoles) || [];
+          const holder = document.createElement("div");
+          holder.className = "colorpick";
+          const linked = String(value).startsWith("brand:") ? String(value).slice(6) : null;
           input = document.createElement("input");
-          input.type = "color"; input.value = value;
+          input.type = "color";
+          input.value = linked ? (brand.colors[linked] || "#ffffff") : value;
+          input.title = "Couleur libre";
           input.onchange = () => onChange(input.value);
-          wrap.appendChild(input);
+          holder.appendChild(input);
+          for (const role of roles) {
+            const sw = document.createElement("button");
+            sw.type = "button";
+            sw.className = "sw" + (linked === role.key ? " on" : "");
+            sw.style.background = brand.colors[role.key];
+            sw.title = `Charte : ${role.label}`;
+            sw.onclick = () => onChange("brand:" + role.key);
+            holder.appendChild(sw);
+          }
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          const role = roles.find((r) => r.key === linked);
+          tag.textContent = role ? `charte · ${role.label.toLowerCase()}` : "libre";
+          holder.appendChild(tag);
+          wrap.appendChild(holder);
         } else if (f.type === "image") {
           // Pick an image already imported, import a new one (button or drop),
           // and choosing one also switches on the mode it belongs to — an image
@@ -813,6 +912,24 @@
           tip.textContent = assetList.length
             ? "Clique une image déjà importée, ou glisse-en une nouvelle ici."
             : "PNG, JPEG ou WebP — ou glisse l'image ici.";
+          if (f.brandLogo) {
+            // Empty means "the brand's logo"; say which one that is.
+            if (value) {
+              const reset = document.createElement("button");
+              reset.type = "button";
+              reset.textContent = "Utiliser le logo de la charte";
+              reset.style.fontSize = "12px";
+              reset.onclick = () => onChange("");
+              holder.appendChild(reset);
+            } else {
+              tip.textContent = state.brand && state.brand.logo
+                ? "Logo de la charte « " + state.brand.name + " ». Choisis une autre image pour le remplacer ici."
+                : "Aucun logo dans la charte de ce projet : importe-le dans « Charte graphique », ou choisis une image ici.";
+              if (state.brand && state.brand.logo) {
+                thumb.style.backgroundImage = `url("/media/${encodeURIComponent(state.brand.logo)}")`;
+              }
+            }
+          }
           holder.appendChild(tip);
           wrap.appendChild(holder);
         } else {
@@ -1314,20 +1431,33 @@
         }
       }
 
+      // The catalogue in its categories, in the order the server gives them.
+      function effectsByCategory() {
+        const groups = new Map();
+        for (const e of state.effects) {
+          const key = e.category || "Effets";
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(e);
+        }
+        return [...groups];
+      }
+
       function fillEffectPicker() {
         const sel = $("#fx-type");
         const keep = sel.value;
         sel.innerHTML = "";
 
-        const base = document.createElement("optgroup");
-        base.label = "Effets";
-        for (const e of state.effects) {
-          const opt = document.createElement("option");
-          opt.value = "type:" + e.type;
-          opt.textContent = e.label;
-          base.appendChild(opt);
+        for (const [category, list] of effectsByCategory()) {
+          const group = document.createElement("optgroup");
+          group.label = category;
+          for (const e of list) {
+            const opt = document.createElement("option");
+            opt.value = "type:" + e.type;
+            opt.textContent = e.label;
+            group.appendChild(opt);
+          }
+          sel.appendChild(group);
         }
-        sel.appendChild(base);
 
         if (state.presets.length) {
           const mine = document.createElement("optgroup");
@@ -1558,11 +1688,16 @@
         const sel = $("#lib-base");
         const keep = sel.value;
         sel.innerHTML = "";
-        for (const e of state.effects) {
-          const opt = document.createElement("option");
-          opt.value = e.type;
-          opt.textContent = e.label;
-          sel.appendChild(opt);
+        for (const [category, list] of effectsByCategory()) {
+          const group = document.createElement("optgroup");
+          group.label = category;
+          for (const e of list) {
+            const opt = document.createElement("option");
+            opt.value = e.type;
+            opt.textContent = e.label;
+            group.appendChild(opt);
+          }
+          sel.appendChild(group);
         }
         if (keep) sel.value = keep;
       }
@@ -1658,8 +1793,15 @@
       function showView(which) {
         $("#view-edit").hidden = which !== "edit";
         $("#view-lib").hidden = which !== "lib";
+        $("#view-brand").hidden = which !== "brand";
         $("#tab-edit").classList.toggle("on", which === "edit");
         $("#tab-lib").classList.toggle("on", which === "lib");
+        $("#tab-brand").classList.toggle("on", which === "brand");
+        if (which === "brand") {
+          if (!brandSel) brandSel = state.brandId || state.brands[0]?.id || "default";
+          drawBrandPage();
+          return;
+        }
         if (which === "lib") {
           if (!libPreset) libPreset = visiblePresets()[0]?.id || null;
           drawEffectLibrary();
@@ -1667,11 +1809,13 @@
         } else {
           const v = videoById(selected);
           const iframe = $("#frame iframe");
-          if (v && iframe) fitFrame(iframe, v, $("#frame"));
+          if (v && brandDirty) { brandDirty = false; preview(); }
+          else if (v && iframe) fitFrame(iframe, v, $("#frame"));
         }
       }
       $("#tab-edit").onclick = () => showView("edit");
       $("#tab-lib").onclick = () => showView("lib");
+      $("#tab-brand").onclick = () => showView("brand");
 
 
       // ================================================== output format
@@ -1697,6 +1841,10 @@
         fill("#f-fit", state.options.fits, f.fit);
         fill("#f-focus", state.options.focuses, f.focus);
         fill("#f-fill", state.options.fills, f.fill);
+        fill("#f-brand", [
+          { value: "", label: "Studio (par défaut)" },
+          ...state.brands.map((b) => ({ value: b.id, label: b.name })),
+        ], state.brandId || "");
         // Point focal only matters when cropping, the fill only with bands.
         $("#f-focus-wrap").hidden = f.fit !== "cover";
         $("#f-fill-wrap").hidden = f.fit !== "contain";
@@ -1716,6 +1864,325 @@
           preview();
         };
       }
+
+
+      $("#f-brand").onchange = async () => {
+        await api(`/api/projects/${state.activeProject}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ brandId: $("#f-brand").value || null }),
+        });
+        await refresh();
+        preview();
+      };
+
+
+      // ================================================= brand kit page
+
+      let brandSel = null; // "default" | <brandId>
+
+      // Imported fonts are declared in this page too, so the pickers and the
+      // sample show them — under a family name of their own per file.
+      function declareFonts() {
+        let style = $("#user-fonts");
+        if (!style) {
+          style = document.createElement("style");
+          style.id = "user-fonts";
+          document.head.appendChild(style);
+        }
+        style.textContent = (state.fonts || []).map((f) =>
+          `@font-face { font-family: "uf-${f.file}"; src: url("/media/${encodeURIComponent(f.file)}"); }`).join("\n");
+      }
+
+      // The CSS font-family for a brand font value, as the composition has it.
+      function fontCss(value) {
+        if (String(value).startsWith("file:")) return `"uf-${value.slice(5)}", -apple-system, system-ui, sans-serif`;
+        if (!value || value === "system") return `-apple-system, "SF Pro Display", system-ui, sans-serif`;
+        return `"${value}", -apple-system, system-ui, sans-serif`;
+      }
+
+      const DEFAULT_BRAND_VIEW = () => state.defaultBrand || {
+        id: null, name: "Studio (par défaut)",
+        colors: { primary: "#4f8cff", secondary: "#6d28d9", text: "#ffffff", surface: "#080e1a" },
+        fonts: { title: "system", body: "system" }, logo: "",
+      };
+
+      function currentBrand() {
+        if (brandSel === "default") return DEFAULT_BRAND_VIEW();
+        return state.brands.find((b) => b.id === brandSel) || null;
+      }
+
+      // Set when the kit changes, so the editor's preview is rebuilt on return.
+      let brandDirty = false;
+
+      async function patchBrand(id, body) {
+        brandDirty = true;
+        await api(`/api/brands/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        await refresh();
+      }
+
+      function drawBrandList() {
+        const el = $("#brand-list");
+        el.innerHTML = "";
+        const usedBy = (id) => state.projects.filter((p) => (p.brandId || null) === id).length;
+        const row = (id, name, count) => {
+          const div = document.createElement("div");
+          div.className = "tree-row" + (brandSel === id ? " on" : "");
+          const b = id === "default" ? DEFAULT_BRAND_VIEW() : state.brands.find((x) => x.id === id);
+          div.innerHTML = `<span style="display:flex;gap:3px">${["primary", "secondary", "text", "surface"].map((k) =>
+              `<span style="width:9px;height:9px;border-radius:50%;background:${b.colors[k]};border:1px solid var(--line)"></span>`).join("")}</span>
+            <span class="grow">${escapeHtml(name)}</span>
+            <span class="count" title="Projets qui l'utilisent">${count || ""}</span>`;
+          div.onclick = () => { brandSel = id; drawBrandPage(); };
+          el.appendChild(div);
+        };
+        row("default", "Studio (par défaut)", usedBy(null));
+        for (const b of state.brands) row(b.id, b.name, usedBy(b.id));
+      }
+
+      function drawBrandEditor() {
+        const el = $("#brand-editor");
+        el.innerHTML = "";
+        const brand = currentBrand();
+        if (!brand) return;
+
+        if (brandSel === "default") {
+          const note = document.createElement("div");
+          note.className = "readonly";
+          note.innerHTML = `La charte par défaut du studio : bleu, blanc, police système, sans logo.
+            Elle ne se modifie pas — crée ta charte avec <b>+ Charte</b> (elle part de celle-ci),
+            puis choisis-la pour un projet dans la barre « Charte » du montage.`;
+          el.appendChild(note);
+          const make = document.createElement("button");
+          make.className = "primary";
+          make.textContent = "Créer ma charte";
+          make.onclick = () => $("#new-brand").click();
+          el.appendChild(make);
+          return;
+        }
+
+        const name = document.createElement("input");
+        name.type = "text";
+        name.className = "name";
+        name.value = brand.name;
+        name.onchange = () => patchBrand(brand.id, { name: name.value.trim() || brand.name });
+        el.appendChild(name);
+
+        // Colours: picker + hex box, per role.
+        const h1 = document.createElement("h3");
+        h1.textContent = "Couleurs";
+        el.appendChild(h1);
+        const colors = document.createElement("div");
+        colors.className = "colors";
+        for (const role of state.options.colorRoles) {
+          const label = document.createElement("label");
+          label.innerHTML = `<span>${escapeHtml(role.label)}</span>`;
+          const pair = document.createElement("div");
+          pair.className = "pair";
+          const pick = document.createElement("input");
+          pick.type = "color";
+          pick.value = brand.colors[role.key];
+          const hex = document.createElement("input");
+          hex.type = "text";
+          hex.value = brand.colors[role.key];
+          hex.maxLength = 7;
+          const save = (v) => patchBrand(brand.id, { colors: { [role.key]: v } }).then(() => { if (!$("#view-brand").hidden) drawBrandPreview(); });
+          pick.oninput = () => { hex.value = pick.value; drawBrandPreview({ [role.key]: pick.value }); };
+          pick.onchange = () => save(pick.value);
+          hex.onchange = () => {
+            const v = hex.value.trim().startsWith("#") ? hex.value.trim() : "#" + hex.value.trim();
+            if (/^#[0-9a-f]{6}$/i.test(v)) save(v.toLowerCase());
+            else { hex.value = brand.colors[role.key]; toast("Couleur attendue au format #RRGGBB, par exemple #4f8cff."); }
+          };
+          pair.append(pick, hex);
+          label.appendChild(pair);
+          colors.appendChild(label);
+        }
+        el.appendChild(colors);
+
+        // Fonts: system fonts + imported ones.
+        const h2 = document.createElement("h3");
+        h2.textContent = "Polices";
+        el.appendChild(h2);
+        for (const [role, label] of [["title", "Titres"], ["body", "Textes"]]) {
+          const row = document.createElement("div");
+          row.className = "fontrow";
+          row.innerHTML = `<span>${label}</span>`;
+          const sel = document.createElement("select");
+          const sys = document.createElement("optgroup");
+          sys.label = "Polices du Mac";
+          for (const f of state.options.fonts) {
+            const opt = document.createElement("option");
+            opt.value = f.value; opt.textContent = f.label;
+            opt.style.fontFamily = fontCss(f.value);
+            sys.appendChild(opt);
+          }
+          sel.appendChild(sys);
+          if ((state.fonts || []).length) {
+            const mine = document.createElement("optgroup");
+            mine.label = "Mes polices importées";
+            for (const f of state.fonts) {
+              const opt = document.createElement("option");
+              opt.value = "file:" + f.file; opt.textContent = f.name;
+              mine.appendChild(opt);
+            }
+            sel.appendChild(mine);
+          }
+          sel.value = brand.fonts[role];
+          sel.style.fontFamily = fontCss(brand.fonts[role]);
+          sel.onchange = () => patchBrand(brand.id, { fonts: { [role]: sel.value } });
+          row.appendChild(sel);
+          el.appendChild(row);
+        }
+        const fontBtns = document.createElement("div");
+        fontBtns.className = "fontbtns";
+        const importFont = document.createElement("button");
+        importFont.textContent = "Importer une police…";
+        const fontFile = document.createElement("input");
+        fontFile.type = "file";
+        fontFile.accept = ".woff2,.woff,.ttf,.otf";
+        fontFile.hidden = true;
+        importFont.onclick = () => fontFile.click();
+        fontFile.onchange = async () => {
+          const file = fontFile.files && fontFile.files[0];
+          if (!file) return;
+          importFont.disabled = true;
+          importFont.textContent = "Envoi…";
+          try {
+            const { file: stored } = await api("/api/assets", {
+              method: "POST",
+              headers: { "x-filename": encodeURIComponent(file.name) },
+              body: file,
+            });
+            // A kit with the system font for titles takes the new one there.
+            const role = brand.fonts.title === "system" ? "title" : "body";
+            await patchBrand(brand.id, { fonts: { [role]: "file:" + stored } });
+          } finally {
+            importFont.disabled = false;
+            importFont.textContent = "Importer une police…";
+          }
+        };
+        const tip = document.createElement("span");
+        tip.className = "hint";
+        tip.style.padding = "0";
+        tip.textContent = "WOFF2, WOFF, TTF ou OTF — par exemple depuis Google Fonts.";
+        fontBtns.append(importFont, fontFile);
+        el.appendChild(fontBtns);
+        el.appendChild(tip);
+
+        // Logo: the same image picker as the effects.
+        const h3 = document.createElement("h3");
+        h3.textContent = "Logo";
+        el.appendChild(h3);
+        el.appendChild(field(
+          { key: "logo", label: "Image", type: "image", default: "" },
+          brand.logo,
+          (value) => patchBrand(brand.id, { logo: value }),
+          "brand-" + brand.id,
+        ));
+        if (brand.logo) {
+          const drop = document.createElement("button");
+          drop.textContent = "Retirer le logo";
+          drop.style.fontSize = "12px";
+          drop.onclick = () => patchBrand(brand.id, { logo: "" });
+          el.appendChild(drop);
+        }
+        const logoTip = document.createElement("div");
+        logoTip.className = "hint";
+        logoTip.style.padding = "0";
+        logoTip.textContent = "Un PNG à fond transparent rend le mieux. L'élément « Logo » l'utilise.";
+        el.appendChild(logoTip);
+
+        const zone = document.createElement("div");
+        zone.className = "danger-zone";
+        const dup = document.createElement("button");
+        dup.textContent = "Dupliquer";
+        dup.onclick = async () => {
+          const { brand: copy } = await api("/api/brands", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ name: `${brand.name} (copie)`, from: brand.id }),
+          });
+          brandSel = copy.id;
+          await refresh();
+        };
+        const del = document.createElement("button");
+        del.textContent = "Supprimer";
+        del.onclick = async () => {
+          const n = state.projects.filter((p) => p.brandId === brand.id).length;
+          if (!(await askConfirm("Supprimer cette charte ?",
+            `« ${brand.name} »${n ? ` est utilisée par ${n} projet${n > 1 ? "s" : ""}, qui reviendront à la charte par défaut` : ""}.`))) return;
+          await api(`/api/brands/${brand.id}`, { method: "DELETE" });
+          brandSel = "default";
+          await refresh();
+        };
+        zone.append(dup, del);
+        el.appendChild(zone);
+      }
+
+      // A still sample of the kit: a title, a lower third, a button, the logo.
+      function drawBrandPreview(override = {}) {
+        const el = $("#brand-preview");
+        const brand = currentBrand();
+        if (!brand) { el.innerHTML = ""; return; }
+        const c = { ...brand.colors, ...override };
+        const title = fontCss(brand.fonts.title);
+        const body = fontCss(brand.fonts.body);
+        const rgba = (hex, a) => {
+          const n = parseInt(hex.slice(1), 16);
+          return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+        };
+        el.innerHTML = `
+          <div class="brand-card">
+            <div class="bp-title" style="color:${c.text};font-family:${escapeHtml(title)}">Mon titre</div>
+            <div class="bp-lt">
+              <div class="bp-bar" style="background:${c.primary}"></div>
+              <div class="bp-body" style="background:${rgba(c.surface, 0.62)};color:${c.text}">
+                <div class="bp-t" style="font-family:${escapeHtml(title)}">Robin</div>
+                <div class="bp-s" style="font-family:${escapeHtml(body)}">Data &amp; Dev</div>
+              </div>
+            </div>
+            <div class="bp-cta" style="background:${c.primary};color:${c.text};font-family:${escapeHtml(title)}">Abonne-toi</div>
+            ${brand.logo ? `<img class="bp-logo" src="/media/${encodeURIComponent(brand.logo)}" alt="" />` : ""}
+          </div>
+          <div class="brand-swatches">${state.options.colorRoles.map((r) =>
+            `<div><span style="background:${c[r.key]}"></span>${escapeHtml(r.label)}</div>`).join("")}</div>
+          <div class="brand-note">Dans les effets, clique une pastille de couleur pour la lier à la charte :
+            elle suivra alors chaque changement fait ici. Les titres, bandeaux et animations
+            prennent les polices de la charte.</div>`;
+      }
+
+      function drawBrandPage() {
+        declareFonts();
+        if (brandSel !== "default" && !state.brands.some((b) => b.id === brandSel)) brandSel = "default";
+        drawBrandList();
+        drawBrandEditor();
+        drawBrandPreview();
+      }
+
+      $("#new-brand").onclick = async () => {
+        const name = await askText("Nouvelle charte", "Ma charte", "Créer");
+        if (!name) return;
+        const { brand } = await api("/api/brands", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, from: brandSel !== "default" ? brandSel : null }),
+        });
+        brandSel = brand.id;
+        // A first kit is also what the open project wants, most likely.
+        if (!state.brandId) {
+          await api(`/api/projects/${state.activeProject}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ brandId: brand.id }),
+          });
+        }
+        await refresh();
+      };
 
 
       // ============================================ copy effects between clips
@@ -1837,6 +2304,7 @@
         drawTree();
         drawPresets();
         if (!$("#view-lib").hidden) drawEffectLibrary();
+        if (!$("#view-brand").hidden) drawBrandPage();
         drawLibrary();
         drawStack();
         drawTimeline();

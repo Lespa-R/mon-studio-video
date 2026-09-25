@@ -162,6 +162,49 @@ with a large size would otherwise place it partly off-frame, and its exit
 animation leaves by whichever side has more room, so the letters never slide
 off on their way out.
 
+### Animations (`lib/effects-anim.mjs`)
+
+Titre surligné, Mots-clés percutants, Liste à puces, Compteur animé, Flèche
+animée, Barre de progression, Bouton d'appel à l'action, Logo. All are
+`space: "canvas"` — laid out on the output frame and sized on its short side —
+so a 9:16 export gets a layout of its own rather than a scaled landscape one.
+
+- **Counter**: the number is written by a series of `tl.set(el, { textContent })`
+  calls, one per step (≤ 90), computed and formatted in French in Node. That is
+  seekable both ways and needs neither a GSAP plugin nor callbacks firing on
+  seek.
+- **Arrow**: an SVG quadratic curve with `pathLength="1"`, drawn by tweening
+  `stroke-dashoffset` from 1 to 0.
+- **Call to action**: its pulse is a finite `yoyo` repeat sized to the window —
+  an infinite repeat would make the root timeline infinite.
+- Placement transforms and animated transforms live on different elements
+  (a "spot" wrapper and the animated child): a GSAP tween on `x`/`y` would
+  otherwise overwrite a `translate(-50%)` centring.
+
+Text effects take an **Animation** param (`TEXT_ANIMS` in `lib/effects.mjs`):
+each style animates a unit — letters (`-ch`), words (`-wd`) or the whole line
+(a `clip-path` wipe) — and `textTimeline()` compresses it to fit the window.
+
+## Brand kits (`lib/brand.mjs`)
+
+A brand kit is `{ colors: { primary, secondary, text, surface }, fonts: { title,
+body }, logo }`, stored in `studio.json` (`brands`, v6) and chosen per project
+(`project.brandId`, null = the studio default).
+
+Effects never copy a kit's values. A colour param may hold a **token**,
+`"brand:primary"`, which `paint()` compiles to `var(--brand-primary)`;
+`compose()` declares the variables on `#root`, with `--font-title` and
+`--font-body`. Changing the kit re-colours every linked effect on the next
+preview or render, with no effect touched. A hex value stays fixed.
+
+Fonts are either macOS system fonts (headless Chrome renders through CoreText,
+so they match the preview) or files imported through `POST /api/assets`
+(`font_<hex>.woff2|woff|ttf|otf`, checked by signature). An imported font gets
+an `@font-face`, and the `init` scripts — which measure text — wait for
+`document.fonts.load()`; the renderer itself waits for pending fonts before
+the first frame. Every value is validated by `normaliseBrand()`, so nothing
+from a kit reaches the page unchecked.
+
 ### Image treatments
 
 | Effect | What it does | Needs the cut-out |
