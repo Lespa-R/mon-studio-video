@@ -14,3 +14,7 @@ renders/
 # compiled Swift helpers, rebuilt on first run
 tools/facedet
 tools/personmatte
+
+# per-render compositions, removed once each render finishes
+render-*.html
+*.partial.webm

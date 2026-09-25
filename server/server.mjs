@@ -13,6 +13,7 @@ import { catalogue, defaultParams, byType, isTimed } from "../lib/effects.mjs";
 import { Store, newId } from "../lib/store.mjs";
 import { compose, needsMatte } from "../lib/compose.mjs";
 import * as media from "../lib/media.mjs";
+import { makeGuard } from "../lib/guard.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MEDIA = path.join(ROOT, "media");
@@ -32,6 +33,10 @@ const findVideo = (id) => store.video(id);
 
 const jobs = new Map();
 
+// Finished jobs stay pollable for a while, then go: every preview creates one,
+// and a long session would otherwise accumulate them without limit.
+const JOB_TTL_MS = 10 * 60 * 1000;
+
 function startJob(label, worker) {
   const id = newId("job_");
   const job = { id, label, status: "running", progress: 0, message: "", error: null };
@@ -47,6 +52,9 @@ function startJob(label, worker) {
       job.status = "error";
       job.error = String(error.message || error);
       console.error(`[${label}]`, error);
+    })
+    .finally(() => {
+      setTimeout(() => jobs.delete(id), JOB_TTL_MS).unref();
     });
   return job;
 }
@@ -57,6 +65,12 @@ function mediaNames(video) {
   return { bg: `${video.id}-bg${video.ext}`, fg: `${video.id}-fg.webm` };
 }
 
+// One cut-out per clip at a time. Two previews landing close together (the
+// montage and the library, or an add followed by a tweak) used to start two
+// encoders writing the same WebM. Late callers now join the build already in
+// flight and see its progress.
+const mattesInFlight = new Map(); // videoId -> { promise, jobs: Set }
+
 async function ensureMatte(video, job) {
   const { bg, fg } = mediaNames(video);
   const target = path.join(MEDIA, fg);
@@ -65,44 +79,88 @@ async function ensureMatte(video, job) {
     if (video.matteSignature === matteSignature(video)) return fg;
   } catch { /* needs building */ }
 
-  job.message = "Découpe de la personne image par image…";
-  const info = {
-    width: video.width, height: video.height,
-    fps: video.fps, fpsExact: video.fpsExact, duration: video.duration,
-  };
-  const result = await media.makeMatte(
-    path.join(MEDIA, bg), info, target, video.matteOptions || {},
-    (p) => { job.progress = p; });
+  const running = mattesInFlight.get(video.id);
+  if (running) {
+    running.jobs.add(job);
+    job.message = "Découpe déjà en cours…";
+    return running.promise;
+  }
 
-  video.matteSignature = matteSignature(video);
-  video.matteMissing = result.missing;
-  await saveState();
-  return fg;
+  const entry = { jobs: new Set([job]), promise: null };
+  for (const j of entry.jobs) j.message = "Découpe de la personne image par image…";
+
+  entry.promise = (async () => {
+    const info = {
+      width: video.width, height: video.height,
+      fps: video.fps, fpsExact: video.fpsExact, duration: video.duration,
+    };
+    const result = await media.makeMatte(
+      path.join(MEDIA, bg), info, target, video.matteOptions || {},
+      (p) => { for (const j of entry.jobs) j.progress = p; });
+
+    // The clip may have been deleted while we were cutting it out.
+    if (!findVideo(video.id)) {
+      await fsp.rm(target, { force: true });
+      throw new Error("clip supprimé pendant la découpe");
+    }
+    video.matteSignature = matteSignature(video);
+    video.matteMissing = result.missing;
+    await saveState();
+    return fg;
+  })().finally(() => mattesInFlight.delete(video.id));
+
+  mattesInFlight.set(video.id, entry);
+  return entry.promise;
 }
 
 const matteSignature = (video) =>
   JSON.stringify(video.matteOptions || {}) + "|" + video.ext;
 
-async function writeComposition(video) {
-  const { bg, fg } = mediaNames(video);
-  const html = compose(video, { bgFile: bg, fgFile: fg });
-  await fsp.writeFile(path.join(ROOT, "index.html"), html);
-  store.state.activeVideo = video.id;
-  await saveState();
-  return html;
+async function writeAtomic(file, contents) {
+  const tmp = `${file}.tmp`;
+  await fsp.writeFile(tmp, contents);
+  await fsp.rename(tmp, file);
 }
 
+// Renders used to share index.html with the preview, so tweaking an effect
+// mid-render could swap the composition out from under HyperFrames. Now each
+// render composes from a snapshot taken when you clicked, into a file of its
+// own. They also run one at a time: each already starts several Chrome
+// workers, and two in parallel only thrash.
+let renderQueue = Promise.resolve();
+
 function renderJob(video) {
-  return startJob("render", async (job) => {
-    if (needsMatte(video)) await ensureMatte(video, job);
-    await writeComposition(video);
+  const snapshot = structuredClone(video);
+  return startJob("render", (job) => {
+    job.message = "En attente de la fin du rendu précédent…";
+    const turn = renderQueue.then(() => runRender(snapshot, job));
+    renderQueue = turn.catch(() => {});
+    return turn;
+  });
+}
 
-    job.message = "Rendu HyperFrames…";
-    job.progress = 0;
+async function runRender(video, job) {
+  const live = findVideo(video.id);
+  if (!live) throw new Error("clip supprimé avant son rendu");
+  if (needsMatte(video)) await ensureMatte(live, job);
 
-    const output = path.join("renders", `${slug(video.name)}-${Date.now()}.mp4`);
+  const { bg, fg } = mediaNames(video);
+  const html = compose(video, { bgFile: bg, fgFile: fg });
+  // Root level, so the composition's media/ paths resolve unchanged.
+  const composition = `render-${job.id}.html`;
+  await fsp.writeFile(path.join(ROOT, composition), html);
+  // index.html mirrors the last rendered composition, for `npm run check`.
+  await writeAtomic(path.join(ROOT, "index.html"), html);
+
+  job.message = "Rendu HyperFrames…";
+  job.progress = 0;
+
+  const output = path.join("renders", `${slug(video.name)}-${Date.now()}.mp4`);
+  try {
     await new Promise((resolve, reject) => {
-      const proc = spawn("npx", ["--yes", HYPERFRAMES, "render", "--output", output], {
+      const proc = spawn("npx", [
+        "--yes", HYPERFRAMES, "render", "--composition", composition, "--output", output,
+      ], {
         cwd: ROOT,
         env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}` },
       });
@@ -121,9 +179,11 @@ function renderJob(video) {
       proc.on("close", (code) =>
         code === 0 ? resolve() : reject(new Error(`render exited ${code}\n${log.slice(-2000)}`)));
     });
+  } finally {
+    await fsp.rm(path.join(ROOT, composition), { force: true });
+  }
 
-    return { output: `/${output}` };
-  });
+  return { output: `/${output}` };
 }
 
 const slug = (name) =>
@@ -206,19 +266,19 @@ async function addVideo(req, res) {
 
   let info;
   try {
-    info = media.probe(target);
+    info = await media.probe(target);
   } catch (error) {
     await fsp.rm(target, { force: true });
     return send(res, 400, { error: `Fichier illisible : ${error.message}` });
   }
 
   if (info.rotation) {
-    media.flatten(target, info.rotation);
-    info = media.probe(target);
+    await media.flatten(target, info.rotation);
+    info = await media.probe(target);
   }
 
   let face = null;
-  try { face = media.detectFace(target, 24); } catch { /* optional */ }
+  try { face = await media.detectFace(target, 24); } catch { /* optional */ }
 
   const video = {
     id, name: original, ext,
@@ -473,11 +533,12 @@ async function handleApi(req, res, url) {
     }
 
     // prepare / render ----------------------------------------------------
+    // The preview composes in memory; all it needs on disk is the cut-out.
     if (sub === "prepare" && req.method === "POST") {
       const job = startJob("prepare", async (j) => {
         if (needsMatte(video)) await ensureMatte(video, j);
-        j.message = "Composition…";
-        await writeComposition(video);
+        store.state.activeVideo = video.id;
+        await saveState();
         return { ready: true };
       });
       return send(res, 200, { job });
@@ -612,29 +673,8 @@ async function servePresetPreview(res, presetId, videoId) {
 
 // ---------------------------------------------------------------- guard
 
-// The studio drives ffmpeg, writes to disk and deletes media, so only the
-// studio's own page may talk to it.
-//
-// Host: a page on another domain can rebind its DNS to 127.0.0.1 and reach us
-// under its own hostname; a Host we do not recognise is refused outright.
-// Origin: browsers attach it to every cross-site request, including the
-// "simple" POSTs that skip the CORS preflight. Absent (curl, the CLI) is fine —
-// the socket only listens on loopback, so that is a local process.
-let allowedHosts = new Set();
-let allowedOrigins = new Set();
-
-function trust(port) {
-  const hosts = [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`];
-  allowedHosts = new Set(hosts);
-  allowedOrigins = new Set(hosts.map((h) => `http://${h}`));
-}
-
-function refused(req) {
-  if (!allowedHosts.has(String(req.headers.host || "").toLowerCase())) return "hôte non autorisé";
-  const origin = req.headers.origin;
-  if (origin !== undefined && !allowedOrigins.has(origin.toLowerCase())) return "origine non autorisée";
-  return null;
-}
+// Set once we know which port we actually got; see lib/guard.mjs.
+let refused = () => "studio pas encore prêt";
 
 // --------------------------------------------------------------------- main
 
@@ -642,7 +682,7 @@ async function handler(req, res) {
   const url = new URL(req.url, "http://localhost");
   const p = url.pathname;
 
-  const reason = refused(req);
+  const reason = refused(req.headers);
   if (reason) {
     console.warn(`  refusé (${reason}) : ${req.method} ${p} · host=${req.headers.host} origin=${req.headers.origin}`);
     return send(res, 403, { error: `Requête refusée : ${reason}.` });
@@ -709,7 +749,7 @@ async function main() {
   const wanted = Number(process.env.PORT || process.argv[2] || 3002);
   const server = http.createServer(handler);
   const port = await listen(server, wanted, 12);
-  trust(port);
+  refused = makeGuard(port);
 
   console.log(`\n  Studio prêt    http://localhost:${port}`);
   const active = store.activeProject();

@@ -88,16 +88,16 @@ async function main() {
 
   console.log(`\nbehind · ${path.basename(source)} · "${opts.text || "Hello World"}"\n`);
 
-  let info = media.probe(bgPath);
+  let info = await media.probe(bgPath);
   if (info.rotation) {
     step(`rotation de ${info.rotation}° appliquée aux pixels`);
-    media.flatten(bgPath, info.rotation);
-    info = media.probe(bgPath);
+    await media.flatten(bgPath, info.rotation);
+    info = await media.probe(bgPath);
   }
   step(`${info.width}x${info.height} · ${info.fps.toFixed(2)} fps · ` +
        `${info.duration.toFixed(2)}s · audio ${info.hasAudio ? "oui" : "non"}`);
 
-  const face = media.detectFace(bgPath, opts.samples || 24);
+  const face = await media.detectFace(bgPath, opts.samples || 24);
   if (!face) die("aucun visage détecté — utilise le studio (npm start) pour placer le texte à la main");
   step(`visage centre x=${face.centreX} · menton y=${face.chinMin}-${face.chinMax} · ` +
        `détecté sur ${Math.round(face.coverage * 100)}% des échantillons`);

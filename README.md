@@ -189,6 +189,9 @@ server/server.mjs      HTTP + JSON API, zero dependencies
 server/ui/index.html   the interface
 lib/media.mjs          probe / face detection / person matte
 lib/timing.mjs         where an effect instance sits on the clip
+lib/store.mjs          folders, projects, presets — and safe persistence
+lib/guard.mjs          who may talk to the studio (Host / Origin)
+test/                  node --test, no dependencies
 lib/effects.mjs        graphics catalogue — add new effects here
 lib/effects-image.mjs  image treatments (filters, grain, vignette…)
 lib/compose.mjs        state + effects  →  HyperFrames composition
@@ -218,6 +221,37 @@ grain 82, letterbox 88, fade 90.
 
 For a treatment rather than a graphic, return `filters` and/or `bgScale`
 instead of markup; see `lib/effects-image.mjs`.
+
+## Rendering
+
+`Rendre le MP4` snapshots the clip and its effects **at the moment you click**,
+composes that snapshot into a file of its own (`render-<job>.html`, removed
+afterwards) and renders it with `--composition`. Keep editing while it runs:
+nothing you change can reach a render already started.
+
+Renders run **one at a time**. A second click queues behind the first and says
+so; each one already starts several Chrome workers, and two in parallel only
+thrash. `index.html` mirrors the last rendered composition, so `npm run check`
+lints what you last exported.
+
+The preview never touches the disk — it is composed in memory on every edit.
+All it needs from the filesystem is the cut-out, which is built once per clip:
+simultaneous requests for the same clip join the build already in flight, and
+the encode writes to `*.partial.webm` before being renamed into place, so a
+crash never leaves a half-written cut-out to be reused.
+
+## Tests
+
+```bash
+npm test
+```
+
+No dependencies — `node --test`. The suite covers the pure parts: the
+Host/Origin guard, the store (migrations, atomic saves, corrupt-file recovery),
+timing, composition and every catalogue effect, and the parsing of ffprobe and
+face-detection output. One test is marked `todo`: it documents a known gap
+(text containing `</script>` can close the composition's script early) and
+fails on purpose until it is fixed.
 
 ## Requirements
 
