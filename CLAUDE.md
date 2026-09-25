@@ -22,7 +22,8 @@ npm run check    # HyperFrames lint of index.html (= last rendered composition)
 - **Restart the server after changing anything in `lib/` or `server/`.** Node
   caches modules: a render will silently use the old code. `server/ui/index.html`
   is read from disk on every request — a reload is enough.
-- **Test on a throwaway project, never the user's.** Create one through the API,
+- **Test on an isolated copy, not the user's running studio.** Copy the code to a temp dir and run it on another port (`node server/server.mjs 3102`) — it gets its own `studio.json` and `media/`. Creating a project in his live studio once switched what his open tab showed and lost an image he was choosing.
+- **Throwaway projects, never the user's.** Create one through the API,
   upload `~/Desktop/Hello World.mov` (a 3 s talking-head clip), test, then
   `DELETE /api/projects/:id` (removes its media) and re-activate his project.
   Delete test renders from `renders/`.

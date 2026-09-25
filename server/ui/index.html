@@ -298,12 +298,21 @@
       input[type="range"] { width: 100%; accent-color: var(--accent); }
       input[type="color"] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
       .rangewrap { display: flex; align-items: center; gap: 7px; }
-      .imgpick { display: flex; align-items: center; gap: 8px; }
+      .imgpick { display: grid; gap: 7px; border-radius: 7px; }
+      .imgpick.drag { outline: 2px dashed var(--accent); outline-offset: 3px; }
+      .imgpick .row { display: flex; align-items: center; gap: 8px; }
       .imgpick .thumb {
         width: 64px; height: 36px; flex: 0 0 64px; border-radius: 5px;
         border: 1px solid var(--line); background: #11161e center / cover no-repeat;
       }
-      .imgpick button { flex: 1; font-size: 12px; padding: 5px 8px; }
+      .imgpick .row button { flex: 1; font-size: 12px; padding: 5px 8px; }
+      .imgpick .gallery { display: flex; flex-wrap: wrap; gap: 5px; }
+      .imgpick .gallery button {
+        width: 48px; height: 28px; padding: 0; border-radius: 4px;
+        border: 1px solid var(--line); background: #11161e center / cover no-repeat;
+      }
+      .imgpick .gallery button.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+      .imgpick .tip { font-size: 11px; color: var(--muted); }
       .rangewrap input[type="range"] { flex: 1; min-width: 0; }
       .hint { font-size: 11.5px; color: var(--muted); padding: 0 12px 10px; }
       .warn { color: #ffb454; }
@@ -651,8 +660,8 @@
           body.className = "fx-body";
           for (const f of def.schema) {
             if (!fieldApplies(def, f, fx.params)) continue;
-            body.appendChild(field(f, fx.params[f.key], (value) =>
-              patch(v.id, fx.id, { params: { [f.key]: value } }), fx.id));
+            body.appendChild(field(f, fx.params[f.key], (value, extra = {}) =>
+              patch(v.id, fx.id, { params: { ...extra, [f.key]: value } }), fx.id));
           }
           card.appendChild(body);
 
@@ -731,23 +740,28 @@
           input.onchange = () => onChange(input.value);
           wrap.appendChild(input);
         } else if (f.type === "image") {
-          // A thumbnail and a picker. The file is uploaded to the studio, which
-          // answers with the name the effect stores (media/asset_….ext).
+          // Pick an image already imported, import a new one (button or drop),
+          // and choosing one also switches on the mode it belongs to — an image
+          // picked while the effect is on "Dégradé" would otherwise do nothing.
+          const extra = f.showIf ? { [f.showIf.key]: f.showIf.values[0] } : {};
+          const choose = (file) => onChange(file, extra);
+
           const holder = document.createElement("div");
           holder.className = "imgpick";
+          const row = document.createElement("div");
+          row.className = "row";
           const thumb = document.createElement("div");
           thumb.className = "thumb";
           if (value) thumb.style.backgroundImage = `url("/media/${encodeURIComponent(value)}")`;
           const button = document.createElement("button");
           button.type = "button";
-          button.textContent = value ? "Changer…" : "Choisir une image…";
+          button.textContent = value ? "Importer une autre image…" : "Importer une image…";
           input = document.createElement("input");
           input.type = "file";
           input.accept = "image/png,image/jpeg,image/webp";
           input.hidden = true;
-          button.onclick = () => input.click();
-          input.onchange = async () => {
-            const file = input.files && input.files[0];
+
+          const upload = async (file) => {
             if (!file) return;
             button.disabled = true;
             button.textContent = "Envoi…";
@@ -757,12 +771,49 @@
                 headers: { "x-filename": encodeURIComponent(file.name) },
                 body: file,
               });
-              onChange(stored);
+              assetList.unshift({ file: stored });
+              choose(stored);
             } finally {
               button.disabled = false;
             }
           };
-          holder.append(thumb, button, input);
+          button.onclick = () => input.click();
+          input.onchange = () => upload(input.files && input.files[0]);
+
+          // Dropping an image file on the field imports it too.
+          holder.addEventListener("dragover", (e) => { e.preventDefault(); holder.classList.add("drag"); });
+          holder.addEventListener("dragleave", () => holder.classList.remove("drag"));
+          holder.addEventListener("drop", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            holder.classList.remove("drag");
+            const file = [...(e.dataTransfer?.files || [])].find((x) => x.type.startsWith("image/"));
+            upload(file);
+          });
+
+          row.append(thumb, button, input);
+          holder.appendChild(row);
+
+          if (assetList.length) {
+            const gallery = document.createElement("div");
+            gallery.className = "gallery";
+            for (const asset of assetList.slice(0, 12)) {
+              const pick = document.createElement("button");
+              pick.type = "button";
+              pick.title = "Utiliser cette image";
+              pick.className = asset.file === value ? "on" : "";
+              pick.style.backgroundImage = `url("/media/${encodeURIComponent(asset.file)}")`;
+              pick.onclick = () => { if (asset.file !== value) choose(asset.file); };
+              gallery.appendChild(pick);
+            }
+            holder.appendChild(gallery);
+          }
+          const tip = document.createElement("div");
+          tip.className = "tip";
+          tip.textContent = assetList.length
+            ? "Clique une image déjà importée, ou glisse-en une nouvelle ici."
+            : "PNG, JPEG ou WebP — ou glisse l'image ici.";
+          holder.appendChild(tip);
           wrap.appendChild(holder);
         } else {
           input = document.createElement("input");
@@ -1141,6 +1192,8 @@
             <button class="x" title="Supprimer">×</button>`;
           row.onclick = async (e) => {
             if (e.target.closest("button")) return;
+            openProject(project.id);
+            // Also remembered as the default for the next tab that opens.
             await api(`/api/projects/${project.id}/activate`, { method: "POST" });
             selected = null;
             await refresh();
@@ -1216,11 +1269,12 @@
         if (!answer || !answer.text) return;
         const name = answer.text;
         const folderId = answer.choice || null;
-        await api("/api/projects", {
+        const created = await api("/api/projects", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name, folderId }),
         });
+        openProject(created.project.id);
         selected = null;
         await refresh();
         clearFrame();
@@ -1428,11 +1482,11 @@
         if (!def) return;
         for (const f of def.schema) {
           if (!fieldApplies(def, f, preset.params)) continue;
-          editor.appendChild(field(f, preset.params[f.key], async (value) => {
+          editor.appendChild(field(f, preset.params[f.key], async (value, extra = {}) => {
             await api(`/api/presets/${preset.id}`, {
               method: "PATCH",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ params: { [f.key]: value } }),
+              body: JSON.stringify({ params: { ...extra, [f.key]: value } }),
             });
             await refresh();
             previewPreset();
@@ -1670,6 +1724,18 @@
       // a copy survives its source clip being deleted, and pastes across
       // projects. Kept in sessionStorage so a reload does not lose it.
       let clipboard = null;
+
+      // The project this tab has open. The server also remembers a "last
+      // opened" project, but that one is shared by every tab: if it decided
+      // what an open tab shows, switching project anywhere — another tab, a
+      // script — would silently swap this tab's clips under the user's cursor.
+      let assetList = [];
+      let currentProject = null;
+      try { currentProject = sessionStorage.getItem("studio.project"); } catch { /* private mode */ }
+      function openProject(id) {
+        currentProject = id;
+        try { sessionStorage.setItem("studio.project", id || ""); } catch { /* private mode */ }
+      }
       try {
         clipboard = JSON.parse(sessionStorage.getItem("studio.clipboard") || "null");
       } catch {
@@ -1761,7 +1827,12 @@
               at: active.selectionStart, kind: active.type }
           : null;
 
-        state = await api("/api/state");
+        [state, { assets: assetList }] = await Promise.all([
+          api(`/api/state${currentProject ? `?project=${encodeURIComponent(currentProject)}` : ""}`),
+          api("/api/assets"),
+        ]);
+        // The server answers with the tab's project, or the default if it no longer exists.
+        if (state.activeProject !== currentProject) openProject(state.activeProject);
         if (selected && !videoById(selected)) selected = null;
         drawTree();
         drawPresets();
@@ -1789,7 +1860,7 @@
         for (const file of files) {
           setStatus(`Import de ${file.name}…`);
           try {
-            const { video } = await api("/api/videos", {
+            const { video } = await api(`/api/videos?project=${encodeURIComponent(state.activeProject)}`, {
               method: "POST",
               headers: { "x-filename": encodeURIComponent(file.name) },
               body: file,

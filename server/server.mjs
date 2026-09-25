@@ -260,7 +260,7 @@ async function serveFile(req, res, file) {
 
 // ------------------------------------------------------------------- routes
 
-async function addVideo(req, res) {
+async function addVideo(req, res, projectId) {
   const original = decodeURIComponent(req.headers["x-filename"] || "clip.mov");
   const ext = path.extname(original).toLowerCase() || ".mp4";
   const id = newId("vid_");
@@ -300,7 +300,7 @@ async function addVideo(req, res) {
     addedAt: new Date().toISOString(),
   };
 
-  const project = store.activeProject();
+  const project = store.project(projectId) || store.activeProject();
   project.videos.push(video);
   store.state.activeVideo = video.id;
   await saveState();
@@ -368,12 +368,21 @@ async function handleApi(req, res, url) {
 
   if (section === "state" && req.method === "GET") {
     return send(res, 200, {
-      ...store.snapshot(catalogue()),
+      ...store.snapshot(catalogue(), url.searchParams.get("project")),
       options: { aspects: ASPECTS, sizes: SIZES, fits: FITS, focuses: FOCUSES, fills: FILLS },
     });
   }
 
   if (section === "assets" && req.method === "POST" && !id) return addAsset(req, res);
+  if (section === "assets" && req.method === "GET") {
+    const files = (await fsp.readdir(MEDIA)).filter((f) => /^asset_[a-f0-9]+\.(png|jpe?g|webp)$/.test(f));
+    const listed = await Promise.all(files.map(async (file) => {
+      const st = await fsp.stat(path.join(MEDIA, file));
+      return { file, size: st.size, addedAt: st.mtime.toISOString() };
+    }));
+    listed.sort((a, b) => b.addedAt.localeCompare(a.addedAt));
+    return send(res, 200, { assets: listed });
+  }
 
   if (section === "jobs" && req.method === "GET") {
     const job = jobs.get(id);
@@ -537,7 +546,7 @@ async function handleApi(req, res, url) {
   }
 
   if (section === "videos") {
-    if (req.method === "POST" && !id) return addVideo(req, res);
+    if (req.method === "POST" && !id) return addVideo(req, res, url.searchParams.get("project"));
     if (req.method === "DELETE" && id && !sub) return removeVideo(res, id);
 
     const video = findVideo(id);
