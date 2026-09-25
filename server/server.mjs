@@ -16,6 +16,7 @@ import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/fo
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
 import { SYSTEM_FONTS, COLOR_ROLES, DEFAULT_BRAND } from "../lib/brand.mjs";
+import { LANGUAGES, groupWords, normaliseCues, parseSrt, toSrt, chunkPlan } from "../lib/captions.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MEDIA = path.join(ROOT, "media");
@@ -398,6 +399,7 @@ async function handleApi(req, res, url) {
         aspects: ASPECTS, sizes: SIZES, fits: FITS, focuses: FOCUSES, fills: FILLS,
         fonts: SYSTEM_FONTS.map(({ value, label }) => ({ value, label })),
         colorRoles: COLOR_ROLES,
+        languages: LANGUAGES,
       },
       defaultBrand: DEFAULT_BRAND,
     });
@@ -689,6 +691,88 @@ async function handleApi(req, res, url) {
       }
       if (req.method === "DELETE") {
         video.effects = video.effects.filter((e) => e.id !== subId);
+        await saveState();
+        return send(res, 200, { ok: true });
+      }
+    }
+
+    // subtitles -------------------------------------------------------------
+    // The lines belong to the clip; the "captions" effect draws them.
+    if (sub === "captions.srt" && req.method === "GET") {
+      const cues = video.captions?.cues || [];
+      res.writeHead(200, {
+        "content-type": "application/x-subrip; charset=utf-8",
+        "content-disposition": `attachment; filename="${slug(video.name)}.srt"`,
+        "cache-control": "no-store",
+      });
+      return res.end(toSrt(cues));
+    }
+
+    if (sub === "captions") {
+      // A clip with subtitles and nothing to draw them would look broken.
+      const ensureEffect = () => {
+        if (video.effects.some((e) => e.type === "captions")) return false;
+        video.effects.push({
+          id: newId("fx_"), type: "captions", name: null, enabled: true,
+          start: 0, duration: null, params: defaultParams("captions"),
+        });
+        return true;
+      };
+
+      if (req.method === "POST" && subId === "generate") {
+        const { lang = "fr-FR" } = await readJson(req);
+        if (!LANGUAGES.some((l) => l.value === lang)) return send(res, 400, { error: "langue inconnue" });
+        if (!video.hasAudio) return send(res, 400, { error: "Ce clip n'a pas de son à transcrire." });
+        const job = startJob("captions", async (j) => {
+          j.message = "Transcription sur ce Mac…";
+          const words = await media.transcribe(path.join(MEDIA, mediaNames(video).bg), {
+            lang,
+            duration: video.duration,
+            chunkPlan,
+            workDir: path.join(ROOT, ".transcode-cache", `captions-${video.id}-${Date.now()}`),
+            onProgress: (p) => { j.progress = p; },
+          });
+          if (!findVideo(video.id)) throw new Error("clip supprimé pendant la transcription");
+          const cues = groupWords(words);
+          video.captions = { lang, source: "apple", cues };
+          const added = ensureEffect();
+          await saveState();
+          return { cues: cues.length, words: words.length, added };
+        });
+        return send(res, 200, { job });
+      }
+
+      if (req.method === "POST" && subId === "import") {
+        const raw = await new Promise((resolve, reject) => {
+          let text = "";
+          req.setEncoding("utf8");
+          req.on("data", (c) => { text += c; if (text.length > 2_000_000) req.destroy(); });
+          req.on("end", () => resolve(text));
+          req.on("error", reject);
+        });
+        const cues = parseSrt(raw).filter((c) => c.start < video.duration);
+        if (!cues.length) return send(res, 400, { error: "Aucun sous-titre lisible dans ce fichier (SRT ou VTT attendu)." });
+        video.captions = { lang: video.captions?.lang || "fr-FR", source: "srt", cues };
+        const added = ensureEffect();
+        await saveState();
+        return send(res, 200, { captions: video.captions, added });
+      }
+
+      if (req.method === "PUT" && !subId) {
+        const body = await readJson(req);
+        const cues = normaliseCues(body.cues, video.captions?.cues || [], video.duration);
+        video.captions = {
+          lang: LANGUAGES.some((l) => l.value === body.lang) ? body.lang : video.captions?.lang || "fr-FR",
+          source: video.captions?.source || "manual",
+          cues,
+        };
+        const added = body.ensureEffect ? ensureEffect() : false;
+        await saveState();
+        return send(res, 200, { captions: video.captions, added });
+      }
+
+      if (req.method === "DELETE" && !subId) {
+        video.captions = null;
         await saveState();
         return send(res, 200, { ok: true });
       }

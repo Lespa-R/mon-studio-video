@@ -287,7 +287,8 @@ test("a dragged element is centred on its x / y, and every draggable one marks i
   for (const effect of EFFECTS.filter((e) => e.drag && !e.drag.stage)) {
     const params = { ...defaultParams(effect.type) };
     if (effect.drag.key) Object.assign(params, { [effect.drag.key]: "free", x: 25, y: 75 });
-    const video = effect.type === "logo" ? { ...canvas, brand: { logo: "asset_0123456789abcdef.png" } } : canvas;
+    const video = { ...canvas, brand: { logo: "asset_0123456789abcdef.png" },
+      captions: { cues: [{ id: "cue_00000000", start: 0, end: 1, text: "Bonjour", words: [{ w: "Bonjour", s: 0, e: 1 }] }] } };
     const built = effect.build(fx(effect.type, { params }), video);
     assert.match(built.html, /data-drag="fx_/, effect.type);
     if (effect.drag.key) assert.match(built.css, /left: 25%; top: 75%;\s*transform: translate\(-50%, -50%\)/, effect.type);
@@ -317,5 +318,14 @@ test("a free text sits at its x / y in the source frame, face or not", () => {
     const built = byType(type).build(
       fx(type, { params: { ...defaultParams(type), [key]: "free", x: 25, y: 40 } }), video());
     assert.match(built.css, /left: 320px; top: 288px;/, type);
+  }
+});
+
+test("panels that GSAP slides with xPercent carry no CSS translate of their own", () => {
+  // GSAP reads a CSS translate back as pixels and adds its xPercent on top:
+  // the chapter panel then stayed on screen after its exit.
+  for (const type of ["chapter", "wipe"]) {
+    const built = byType(type).build(fx(type, { start: 0, duration: 2 }), canvas);
+    assert.doesNotMatch(built.css, /translate[XY]\(/, type);
   }
 });

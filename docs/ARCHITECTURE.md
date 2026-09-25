@@ -194,6 +194,26 @@ Text effects take an **Animation** param (`TEXT_ANIMS` in `lib/effects.mjs`):
 each style animates a unit — letters (`-ch`), words (`-wd`) or the whole line
 (a `clip-path` wipe) — and `textTimeline()` compresses it to fit the window.
 
+## Subtitles (`lib/captions.mjs`, `lib/effects-captions.mjs`)
+
+`video.captions = { lang, source, cues: [{ id, start, end, text, words: [{ w, s, e }] }] }`.
+
+- **Transcription** (`POST /api/videos/:id/captions/generate`, a job): the
+  audio is cut at pauses (ffmpeg `silencedetect`, `chunkPlan()`, ≤ 55 s a
+  piece), each piece goes to `tools/Transcribe.app` — Apple's
+  `SFSpeechRecognizer` with `requiresOnDeviceRecognition` and punctuation —
+  which writes timed words to a JSON file. It is an app bundle launched with
+  `open -W` so macOS's permission prompt names it. `groupWords()` turns words
+  into lines (≤ 38 characters, cut at sentence ends and pauses, ≤ 3.2 s).
+- **Editing** (`PUT …/captions`, the whole list): `normaliseCues()` keeps the
+  heard word timings when a line's text is unchanged (stretching them if its
+  window moved) and spreads words by length when it was rewritten.
+- **SRT/VTT** import and `GET …/captions.srt` export.
+- **Drawing**: the `captions` effect (canvas space) stacks one element per line
+  — or per group of words for "pop" — in one grid cell and shows each by
+  opacity at its time. Karaoke fades in a highlighted copy of each word over
+  the plain one: GSAP cannot tween a colour held in a CSS variable.
+
 ## Brand kits (`lib/brand.mjs`)
 
 A brand kit is `{ colors: { primary, secondary, text, surface }, fonts: { title,

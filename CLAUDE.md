@@ -40,6 +40,8 @@ server/ui/index.html   the whole UI (vanilla JS, no build)
 lib/effects.mjs        text effects, TEXT_ANIMS + registry  ← add effects here
 lib/effects-anim.mjs   animated elements (canvas space)     ← or here
 lib/effects-image.mjs  image treatments (filters, grain…)   ← or here
+lib/effects-captions.mjs the "Sous-titres" effect (draws video.captions)
+lib/captions.mjs       subtitles: words → lines, edits, SRT in/out, chunking (pure)
 lib/brand.mjs          brand kits: colour tokens, fonts, logo (pure)
 lib/compose.mjs        clip + effects + format → HyperFrames HTML (pure)
 lib/format.mjs         output canvas, and how the clip is placed on it (pure)
@@ -47,7 +49,8 @@ lib/timing.mjs         an effect's window on the clip (pure)
 lib/store.mjs          studio.json (v6): folders → projects (+format, brandId) → clips → effects; presets; brands; fonts
 lib/media.mjs          ffprobe, face detection, person matte (async)
 lib/guard.mjs          Host/Origin guard
-tools/*.swift          Vision helpers: facedet (face box), personmatte (cut-out → RGBA)
+tools/*.swift          Vision helpers: facedet (face box), personmatte (cut-out → RGBA);
+                       transcribe.swift → tools/Transcribe.app (on-device speech → timed words)
 bin/behind.mjs         one-shot CLI
 test/*.test.mjs        node --test
 docs/ARCHITECTURE.md   the long-form technical reference
@@ -152,11 +155,25 @@ canvas model.
   Both are false positives. `Lint`, `Runtime`, `Motion` must stay clean, and
   `content_overlap` means a real timing bug.
 
+- **GSAP reads a CSS `translate(-101%)` back as pixels** and adds its own
+  `xPercent` on top: an element slid with `xPercent` must not also carry a CSS
+  translate (the chapter panel once stayed on screen). Let the `fromTo` set
+  the start. And transforms do nothing on an inline `<span>`: make it
+  `inline-block`.
+- **Subtitles need macOS permission.** `Transcribe.app` is launched with
+  `open -W -n -g` so the Speech Recognition prompt names it (a bare CLI would
+  be attributed to whatever terminal started the studio). If the answer was
+  "no", only the user can switch it back on in System Settings › Privacy &
+  Security › Speech Recognition — never touch that yourself. Rebuilding the
+  app changes its signature and may re-prompt.
+
 ## Decisions — do not revisit without being asked
 
 - **No shot sequencing.** Chaining several shots into one video was built, then
   removed at the user's request (2026-09-25). One clip → one render.
 - **Local first.** No accounts, no cloud; the server listens on 127.0.0.1 only.
+  Subtitles use Apple's on-device recogniser (`requiresOnDeviceRecognition`),
+  not a speech API.
 - **Zero runtime dependencies.** No `npm install`, no build step.
 - **Private GitHub repo**: `Lespa-R/mon-studio-hyperframe`. `studio.json`,
   `media/`, `renders/` are never committed.

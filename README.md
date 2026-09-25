@@ -83,6 +83,14 @@ Le menu est classé en trois familles : **Textes**, **Animations**, **Image**.
 | **Barre de progression** | une fine barre qui se remplit au fil du clip |
 | **Bouton d'appel à l'action** | « Abonne-toi », « Lien en commentaire »… surgit puis pulse |
 | **Logo** | le logo de ta charte dans un coin |
+| **Citation** | une citation qui apparaît mot à mot, avec son auteur |
+| **Cercle dessiné** | un cercle tracé à la main autour d'un détail |
+| **Réaction emoji** | une gerbe d'emojis (❤️ 👍 🔥 🎉…) qui s'envolent |
+| **Notification** | une notification façon téléphone qui glisse depuis le haut |
+| **Pseudo réseau social** | ton @pseudo et ton réseau dans une pastille |
+| **Titre de chapitre** | un panneau plein écran annonce une nouvelle partie |
+| **Transition balayage** | deux bandes de couleur traversent l'image, pour masquer une coupe |
+| **Sous-titres** | affiche les sous-titres du clip (voir plus bas) |
 | **Étalonnage** | exposition, contraste, saturation, température |
 | **Flou d'arrière-plan** | floute la pièce, te garde net |
 | **Remplacer l'arrière-plan** | remplace la pièce derrière toi par ton image, un dégradé ou une couleur |
@@ -113,6 +121,26 @@ visage » (par défaut) ou « Libre ».
 Les textes (**Texte derrière moi**, **Titre devant**) ont un réglage
 **Animation** : Flou montant, Rebond, Glissement, Machine à écrire, Mot par mot,
 Balayage.
+
+### Sous-titres
+
+Onglet **Sous-titres**, à côté de *Effets* :
+
+1. Choisis la langue parlée, clique **Générer**. La transcription se fait **sur
+   ton Mac** avec la reconnaissance vocale d'Apple : rien ne part sur Internet,
+   pas de compte, pas d'API. La première fois, macOS demande l'autorisation
+   pour « Mon Studio – Transcription » : accepte. (Refusée par erreur ?
+   Réglages Système › Confidentialité et sécurité › Reconnaissance vocale.)
+2. Corrige les lignes : le texte, et le début / la fin de chacune. `▶` ou un
+   clic dans le texte place l'aperçu sur la ligne ; `+` en ajoute une après,
+   `×` la supprime. La ligne en cours de lecture est surlignée en vert.
+3. Le style se règle dans l'effet **Sous-titres** (ajouté tout seul) :
+   *Bandeau*, *Karaoké* (le mot prononcé s'allume), *Mot à mot* (gros, style
+   Reels), *Contour* ; taille, couleurs de la charte, majuscules, position —
+   et il se déplace à la souris sur l'aperçu.
+
+**Importer…** accepte un fichier SRT ou VTT ; **Exporter .srt** télécharge les
+sous-titres corrigés (pour YouTube, LinkedIn…).
 
 ### Ta charte graphique
 

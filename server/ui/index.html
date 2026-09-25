@@ -154,6 +154,32 @@
       .frame.busy::after { opacity: 1; }
       .fx.flash { animation: flash 1.1s ease-out; }
 
+      /* right column: effects | subtitles ------------------------------ */
+      .coltabs { display: flex; gap: 4px; padding: 12px 12px 10px; }
+      .coltabs button { flex: 1; font-size: 12.5px; padding: 6px 10px; background: transparent; color: var(--muted); }
+      .coltabs button.on { background: var(--panel-2); color: var(--text); border-color: var(--accent); }
+      .panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+      .panel[hidden] { display: none; }
+      .cc-head { display: grid; gap: 7px; padding: 0 12px 10px; }
+      .cc-row { display: flex; gap: 6px; }
+      .cc-row select { flex: 1; }
+      .cc-row button { flex: 1; font-size: 12px; padding: 6px 8px; }
+      .cc-note { padding: 0; line-height: 1.5; }
+      .cc-note.warn { color: #ffb454; }
+      .cue { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; margin-bottom: 6px; }
+      .cue.now { border-color: var(--ok); box-shadow: inset 3px 0 0 var(--ok); }
+      .cue-top { display: flex; align-items: center; gap: 4px; margin-bottom: 5px; font-size: 11px; color: var(--muted); }
+      .cue-top input[type="number"] { width: 62px; padding: 2px 4px; font-size: 11px; }
+      .cue-top .grow { flex: 1; }
+      .cue-top button { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 1px 5px; border-radius: 5px; font-size: 13px; }
+      .cue-top button:hover { color: var(--text); background: var(--panel-2); }
+      .cue-top .x:hover { color: var(--danger); background: rgba(255,95,86,.12); }
+      .cue textarea {
+        width: 100%; resize: vertical; min-height: 40px; font: inherit; font-size: 13px; line-height: 1.4;
+        background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px;
+      }
+      .cue textarea:focus { border-color: var(--accent); outline: none; }
+
       /* drag handles over the preview ----------------------------------- */
       .handles { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
       .handles[hidden] { display: none; }
@@ -449,7 +475,11 @@
       </section>
 
       <section class="col">
-        <h2>Effets</h2>
+        <div class="coltabs">
+          <button id="rt-fx" class="on">Effets</button>
+          <button id="rt-cc">Sous-titres</button>
+        </div>
+        <div class="panel" id="panel-fx">
         <div class="add">
           <select id="fx-type"></select>
           <button id="fx-add" disabled>Ajouter</button>
@@ -462,6 +492,24 @@
         </div>
         <div class="hint" id="clip-note" hidden></div>
         <div class="scroll" id="stack"></div>
+        </div>
+
+        <div class="panel" id="panel-cc" hidden>
+          <div class="cc-head">
+            <div class="cc-row">
+              <select id="cc-lang" title="Langue parlée dans le clip"></select>
+              <button id="cc-gen" class="primary">Générer</button>
+            </div>
+            <div class="cc-row">
+              <button id="cc-import" title="Importer un fichier SRT ou VTT">Importer…</button>
+              <button id="cc-export" title="Télécharger les sous-titres en .srt">Exporter .srt</button>
+              <button id="cc-clear" title="Effacer tous les sous-titres de ce clip">Effacer</button>
+            </div>
+            <input type="file" id="cc-file" accept=".srt,.vtt,text/plain" hidden />
+            <div class="hint cc-note" id="cc-note"></div>
+          </div>
+          <div class="scroll" id="cc-list"></div>
+        </div>
       </section>
     </main>
 
@@ -1289,6 +1337,229 @@
       }
 
       // Playhead, read straight off the preview's background video.
+      // ================================================== subtitles
+
+      // Lines are edited here as a local copy and saved (debounced) as a whole:
+      // the server keeps the timed words wherever a line's text is unchanged.
+      let ccCues = [];        // the selected clip's lines, being edited
+      let ccFor = null;       // the clip they belong to
+      let ccTimer = null;
+
+      const fmtTime = (t) => {
+        const m = Math.floor(t / 60);
+        return `${m}:${(t - m * 60).toFixed(1).padStart(4, "0")}`;
+      };
+
+      function showRightPanel(which) {
+        $("#panel-fx").hidden = which !== "fx";
+        $("#panel-cc").hidden = which !== "cc";
+        $("#rt-fx").classList.toggle("on", which === "fx");
+        $("#rt-cc").classList.toggle("on", which === "cc");
+        if (which === "cc") drawCaptions(true);
+      }
+      $("#rt-fx").onclick = () => showRightPanel("fx");
+      $("#rt-cc").onclick = () => showRightPanel("cc");
+
+      function ccNote(text, warn = false) {
+        const el = $("#cc-note");
+        el.textContent = text;
+        el.classList.toggle("warn", warn);
+      }
+      const CC_INFO = "La transcription se fait sur ce Mac avec la reconnaissance vocale d'Apple : rien ne part sur Internet. " +
+        "La première fois, macOS demande l'autorisation pour « Mon Studio – Transcription ».";
+
+      // `force` reloads the lines from the clip; otherwise a redraw while the
+      // user is typing would throw away what they typed.
+      function drawCaptions(force = false) {
+        if ($("#panel-cc").hidden) return;
+        const v = videoById(selected);
+        const langSel = $("#cc-lang");
+        if (!langSel.options.length && state.options) {
+          for (const l of state.options.languages) {
+            const opt = document.createElement("option");
+            opt.value = l.value; opt.textContent = l.label;
+            langSel.appendChild(opt);
+          }
+        }
+        for (const id of ["cc-gen", "cc-import", "cc-export", "cc-clear"]) $("#" + id).disabled = !v;
+        const list = $("#cc-list");
+        if (!v) { list.innerHTML = '<div class="none">Sélectionne une vidéo.</div>'; ccFor = null; return; }
+        if (!force && ccFor === v.id && list.contains(document.activeElement)) return;
+
+        ccFor = v.id;
+        ccCues = JSON.parse(JSON.stringify(v.captions?.cues || []));
+        if (v.captions?.lang) langSel.value = v.captions.lang;
+        $("#cc-export").disabled = !ccCues.length;
+        $("#cc-clear").disabled = !ccCues.length;
+        $("#cc-gen").textContent = ccCues.length ? "Régénérer" : "Générer";
+
+        const hasEffect = v.effects.some((e) => e.type === "captions" && e.enabled !== false);
+        if (!v.hasAudio) ccNote("Ce clip n'a pas de son : importe un fichier SRT ou ajoute les lignes à la main.");
+        else if (ccCues.length && !hasEffect) ccNote("Ces sous-titres ne s'affichent pas : ajoute ou active l'effet « Sous-titres » dans l'onglet Effets.", true);
+        else ccNote(ccCues.length ? `${ccCues.length} lignes. Modifie le texte ou les temps ; le style se règle dans l'effet « Sous-titres ».` : CC_INFO);
+
+        list.innerHTML = "";
+        if (!ccCues.length) {
+          const add = document.createElement("button");
+          add.textContent = "+ Écrire les sous-titres à la main";
+          add.style.width = "100%";
+          add.onclick = () => { insertCue(-1); };
+          list.appendChild(add);
+          return;
+        }
+        ccCues.forEach((cue, i) => list.appendChild(cueRow(cue, i)));
+      }
+
+      function cueRow(cue, i) {
+        const row = document.createElement("div");
+        row.className = "cue";
+        row.dataset.cue = cue.id;
+        row.innerHTML = `
+          <div class="cue-top">
+            <button class="go" title="Aller à ce moment">▶ ${fmtTime(cue.start)}</button>
+            <input type="number" class="cs" step="0.1" min="0" value="${cue.start}" title="Début (s)" />
+            →
+            <input type="number" class="ce" step="0.1" min="0" value="${cue.end}" title="Fin (s)" />
+            <span class="grow"></span>
+            <button class="add" title="Ajouter une ligne après">+</button>
+            <button class="x" title="Supprimer la ligne">×</button>
+          </div>
+          <textarea rows="2"></textarea>`;
+        const text = row.querySelector("textarea");
+        text.value = cue.text;
+        text.oninput = () => { cue.text = text.value; saveCaptionsSoon(); };
+        const num = (sel, key) => {
+          const el = row.querySelector(sel);
+          el.onchange = () => {
+            const v = el.valueAsNumber;
+            if (!Number.isFinite(v)) return;
+            cue[key] = Math.max(0, v);
+            saveCaptionsSoon(true);
+          };
+        };
+        num(".cs", "start");
+        num(".ce", "end");
+        row.querySelector(".go").onclick = () => post({ type: "seek", t: cue.start + 0.05 });
+        text.onfocus = () => post({ type: "seek", t: cue.start + 0.05 });
+        row.querySelector(".add").onclick = () => insertCue(i);
+        row.querySelector(".x").onclick = () => {
+          ccCues.splice(i, 1);
+          saveCaptionsSoon(true);
+        };
+        return row;
+      }
+
+      function insertCue(after) {
+        const v = videoById(selected);
+        if (!v) return;
+        const prev = ccCues[after];
+        const next = ccCues[after + 1];
+        const start = prev ? prev.end : 0;
+        const end = Math.min(next ? next.start : v.duration, start + 2);
+        if (end - start < 0.2) return toast("Pas de place ici : raccourcis la ligne suivante d'abord.");
+        ccCues.splice(after + 1, 0, { start, end, text: "Nouvelle ligne" });
+        saveCaptionsSoon(true, after + 1);
+      }
+
+      // Text edits wait for a pause in typing; structural edits (times, add,
+      // delete) are saved at once and redraw the list.
+      function saveCaptionsSoon(structural = false, focusAt = null) {
+        const videoId = ccFor;
+        clearTimeout(ccTimer);
+        ccTimer = setTimeout(async () => {
+          const { captions, added } = await api(`/api/videos/${videoId}/captions`, {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ cues: ccCues, lang: $("#cc-lang").value, ensureEffect: true }),
+          });
+          const v = videoById(videoId);
+          if (v) v.captions = captions;
+          if (added) await refresh();
+          if (structural) {
+            drawCaptions(true);
+            if (focusAt !== null) {
+              const ta = document.querySelectorAll("#cc-list textarea")[focusAt];
+              if (ta) { ta.focus(); ta.select(); }
+            }
+          } else {
+            // Keep the typed text, take the server's ids for new lines.
+            captions.cues.forEach((c, i) => { if (ccCues[i]) ccCues[i].id = c.id; });
+          }
+          if (selected === videoId) preview();
+        }, structural ? 0 : 700);
+      }
+
+      // Highlight the line being said, during playback or after a seek.
+      function markCue(t) {
+        if ($("#panel-cc").hidden || t === null || t === undefined) return;
+        for (const row of document.querySelectorAll("#cc-list .cue")) {
+          const cue = ccCues.find((c) => c.id === row.dataset.cue);
+          row.classList.toggle("now", Boolean(cue && t >= cue.start && t < cue.end));
+        }
+      }
+
+      $("#cc-gen").onclick = async () => {
+        const v = videoById(selected);
+        if (!v) return;
+        if (v.captions?.cues?.length && !(await dialog({
+          title: "Régénérer les sous-titres ?",
+          message: "Les lignes actuelles, et tes corrections, seront remplacées par une nouvelle transcription.",
+          okLabel: "Régénérer", danger: true,
+        }))) return;
+        const button = $("#cc-gen");
+        button.disabled = true;
+        ccNote("Transcription en cours sur ce Mac… Si macOS demande l'autorisation pour « Mon Studio – Transcription », accepte-la.");
+        $("#prog").hidden = false;
+        try {
+          const { job } = await api(`/api/videos/${v.id}/captions/generate`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ lang: $("#cc-lang").value }),
+          });
+          const done = await waitJob(job.id);
+          await refresh();
+          drawCaptions(true);
+          setStatus(done.result.cues
+            ? `${done.result.cues} lignes de sous-titres créées.`
+            : "Aucune parole reconnue dans ce clip.");
+          preview();
+        } catch (error) {
+          ccNote(error.message, true);
+          setStatus("");
+        } finally {
+          button.disabled = false;
+          $("#prog").hidden = true;
+        }
+      };
+
+      $("#cc-import").onclick = () => $("#cc-file").click();
+      $("#cc-file").onchange = async () => {
+        const file = $("#cc-file").files && $("#cc-file").files[0];
+        $("#cc-file").value = "";
+        const v = videoById(selected);
+        if (!file || !v) return;
+        try {
+          await api(`/api/videos/${v.id}/captions/import`, { method: "POST", body: await file.text() });
+          await refresh();
+          drawCaptions(true);
+          preview();
+        } catch (error) {
+          ccNote(error.message, true);
+        }
+      };
+      $("#cc-export").onclick = () => {
+        const v = videoById(selected);
+        if (v) location.href = `/api/videos/${v.id}/captions.srt`;
+      };
+      $("#cc-clear").onclick = async () => {
+        const v = videoById(selected);
+        if (!v || !(await askConfirm("Effacer les sous-titres ?", "Toutes les lignes de ce clip seront supprimées."))) return;
+        await api(`/api/videos/${v.id}/captions`, { method: "DELETE" });
+        await refresh();
+        drawCaptions(true);
+        preview();
+      };
+
       // ------------------------------------------- drag on the preview
 
       // Every animation that can move (its catalogue entry has `drag`) gets
@@ -1500,7 +1771,7 @@
           } catch { /* iframe mid-reload */ }
           place("#tl-head", "#tl", "#tl .tl-ruler .tl-track", duration, t);
           const now = performance.now();
-          if (now - handlesAt > 120) { handlesAt = now; drawHandles(); }
+          if (now - handlesAt > 120) { handlesAt = now; drawHandles(); markCue(t); }
           requestAnimationFrame(frame);
         }
         requestAnimationFrame(frame);
@@ -2496,6 +2767,7 @@
         drawLibrary();
         drawStack();
         drawTimeline();
+        drawCaptions(true);
         await preview();
       }
 
@@ -2519,6 +2791,7 @@
         drawPresets();
         if (!$("#view-lib").hidden) drawEffectLibrary();
         if (!$("#view-brand").hidden) drawBrandPage();
+        drawCaptions(ccFor !== selected);
         drawLibrary();
         drawStack();
         drawTimeline();
