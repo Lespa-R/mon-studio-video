@@ -69,7 +69,7 @@ wire.
   timed: true,                  // false = whole clip (e.g. CSS filters)
   space: "stage",               // "stage" (moves with the footage) or "canvas" (output frame)
   layer: "front",               // "behind" (under the cut-out) | "front" | "top"
-  needsFace: false,             // true only if placed from the face box (behind-text)
+  needsFace: false,             // true only if it cannot work without the face box (none do today)
   drag: { key: "position" },    // optional: draggable on the preview (see below)
   schema: [{ key, label, type: "text|color|number|range|select|image", default,
              showIf: { key: "mode", values: ["image"] } /* optional */ }],
@@ -114,7 +114,9 @@ Rules that keep compositions correct:
   itself reaches `build()` as `video.brand` (the logo effect reads its `logo`).
 - **Dragging on the preview.** `drag: { key }` means a drop sets
   `params[key] = "free"` plus `x` / `y` (% of the frame) = the box's new centre;
-  `drag: { delta: true }` adds the move to `x` / `y` (the arrow's target). Mark
+  `drag: { delta: true }` adds the move to `x` / `y` (the arrow's target).
+  `drag: { key, stage: true }` is for stage effects (behind-text, title): x / y
+  are % of the *source* frame, and the element carries `data-anchor-x/-y`. Mark
   the grabbable box(es) with `data-drag="${id}"`, give the position select a
   `"free"` option and the `freeXY(key)` fields, and centre on
   `freeSpot(p)` in free mode (see `lib/effects-anim.mjs`).

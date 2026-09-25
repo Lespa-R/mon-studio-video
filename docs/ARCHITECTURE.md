@@ -252,6 +252,14 @@ Layer 3 is the same footage with everything but the person erased, published as
 a VP9 WebM with a real alpha channel. Whatever sits in layer 2 disappears
 wherever you are. No green screen, no rotoscoping.
 
+The cut-out needs a person, not a face: segmentation finds a silhouette seen
+from behind or far away. Only the text's *placement* can use the face (anchor
+"face": centred on it, `rise` face-heights above the chin). With anchor "free",
+or when no face was detected, the line sits at `x` / `y` % of the source frame
+— which is what dragging it on the preview writes. Stage effects carry
+`data-anchor-x` / `data-anchor-y` (source pixels); the UI divides the move by
+the stage's scale and adds it there.
+
 The cut-out comes from Apple's **Vision** framework
 (`VNGeneratePersonSegmentationRequest`), frame by frame, in Swift. Frames stream
 as raw RGBA straight into ffmpeg — no intermediate files, constant memory

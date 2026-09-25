@@ -284,7 +284,7 @@ test("lists split on slashes and never inject markup", () => {
 });
 
 test("a dragged element is centred on its x / y, and every draggable one marks its box", () => {
-  for (const effect of EFFECTS.filter((e) => e.drag)) {
+  for (const effect of EFFECTS.filter((e) => e.drag && !e.drag.stage)) {
     const params = { ...defaultParams(effect.type) };
     if (effect.drag.key) Object.assign(params, { [effect.drag.key]: "free", x: 25, y: 75 });
     const video = effect.type === "logo" ? { ...canvas, brand: { logo: "asset_0123456789abcdef.png" } } : canvas;
@@ -299,4 +299,23 @@ test("the catalogue tells the UI how each element is dragged", () => {
   assert.deepEqual(list.find((e) => e.type === "counter").drag, { key: "position" });
   assert.deepEqual(list.find((e) => e.type === "arrow").drag, { delta: true });
   assert.equal(list.find((e) => e.type === "progress").drag, null);
+});
+
+test("text behind the person needs no face: it is placed freely instead", () => {
+  const noFace = { ...video(), face: null };
+  const built = byType("behind-text").build(fx("behind-text"), noFace);
+  assert.ok(built, "built without a face");
+  assert.equal(built.needsMatte, true);
+  // Default free spot: centred, letters' top at 28 % of the frame.
+  assert.match(built.css, /left: 640px; top: 202px;/);
+  assert.match(built.html, /data-drag="fx_behindtext" data-anchor-x="640" data-anchor-y="202"/);
+});
+
+test("a free text sits at its x / y in the source frame, face or not", () => {
+  for (const type of ["behind-text", "title"]) {
+    const key = type === "title" ? "position" : "anchor";
+    const built = byType(type).build(
+      fx(type, { params: { ...defaultParams(type), [key]: "free", x: 25, y: 40 } }), video());
+    assert.match(built.css, /left: 320px; top: 288px;/, type);
+  }
 });

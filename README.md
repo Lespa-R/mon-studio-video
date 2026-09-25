@@ -59,7 +59,9 @@ Aucun `npm install` : le studio n'a pas de dépendance. Ta bibliothèque
 - **Projets** (colonne de gauche) : `+ Projet` pour en créer un, `+ Dossier`
   pour les ranger. `✎` renomme, `×` supprime.
 - **Vidéos** : glisse tes fichiers dans la zone prévue. À l'import, le studio
-  détecte ton visage — c'est ce qui permet de placer le texte derrière toi.
+  détecte ton visage — c'est ce qui cale le texte derrière toi. Sans visage
+  visible (de dos, de loin), le texte derrière la personne marche quand même :
+  tu le places à la souris.
 
 ### 2. Ajouter des effets
 
@@ -92,13 +94,21 @@ Le menu est classé en trois familles : **Textes**, **Animations**, **Image**.
 Chaque effet se règle dans sa carte. **Tape sur son titre pour le renommer.**
 La case à cocher l'active ou le désactive, `×` le retire.
 
-**Déplacer une animation à la souris** : quand l'aperçu est en pause, chaque
-animation visible à cet instant a un cadre pointillé (au survol de l'aperçu).
+**Déplacer à la souris** : quand l'aperçu est en pause, chaque animation — et
+aussi **Texte derrière moi** et **Titre devant** — visible à cet instant a un
+cadre pointillé (au survol de l'aperçu).
 **Fais-la glisser** où tu veux ; sa position passe en « Libre » et deux
 curseurs, Horizontal et Vertical, permettent d'ajuster au pour cent près.
 Un simple clic sur le cadre ouvre sa carte de réglages, **Échap** annule un
 glisser en cours. La flèche se déplace avec sa cible ; la barre de progression
 reste en haut ou en bas.
+
+**Texte derrière une personne sans visage visible** (de dos, de loin, de
+profil) : la découpe détecte la silhouette, pas le visage. Sur un clip où aucun
+visage n'est trouvé, **Texte derrière moi** se place librement : fais-le glisser
+sur l'aperçu à la hauteur voulue — les épaules, le dos, la tête passent devant.
+Sur un clip avec visage, son réglage **Placement** propose « Calé sur le
+visage » (par défaut) ou « Libre ».
 
 Les textes (**Texte derrière moi**, **Titre devant**) ont un réglage
 **Animation** : Flou montant, Rebond, Glissement, Machine à écrire, Mot par mot,

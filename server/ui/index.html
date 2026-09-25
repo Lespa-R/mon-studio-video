@@ -670,7 +670,7 @@
           row.innerHTML = `
             <div class="meta">
               <div class="name">${escapeHtml(v.name)}</div>
-              <div class="dim">${v.width}×${v.height} · ${v.duration.toFixed(1)}s · ${v.effects.length} effet${v.effects.length > 1 ? "s" : ""}${v.face ? "" : " · pas de visage"}</div>
+              <div class="dim">${v.width}×${v.height} · ${v.duration.toFixed(1)}s · ${v.effects.length} effet${v.effects.length > 1 ? "s" : ""}${v.face ? "" : " · sans visage"}</div>
             </div>
             <button class="x" title="Supprimer">×</button>`;
           row.onclick = (e) => {
@@ -749,17 +749,23 @@
 
           const body = document.createElement("div");
           body.className = "fx-body";
+          // Without a face the text is placed freely whatever "anchor" says
+          // (see behind-text), so show the free controls, not the face ones.
+          const faceless = !v.face && def.schema.some((f) => f.key === "anchor");
+          const shown = faceless ? { ...fx.params, anchor: "free" } : fx.params;
           for (const f of def.schema) {
-            if (!fieldApplies(def, f, fx.params)) continue;
-            body.appendChild(field(f, fx.params[f.key], (value, extra = {}) =>
+            if (!fieldApplies(def, f, shown)) continue;
+            body.appendChild(field(f, shown[f.key], (value, extra = {}) =>
               patch(v.id, fx.id, { params: { ...extra, [f.key]: value } }), fx.id));
           }
           card.appendChild(body);
 
-          if (def.needsFace && !v.face) {
+          // Anchored on the face, but none was found (seen from behind, far
+          // away): the text is placed freely instead — say so.
+          if (faceless) {
             const w = document.createElement("div");
-            w.className = "hint warn";
-            w.textContent = "Aucun visage détecté sur ce clip : cet effet sera ignoré.";
+            w.className = "hint";
+            w.textContent = "Pas de visage détecté (personne de dos, de loin…) : le texte se place librement. Fais-le glisser sur l'aperçu pour le mettre derrière la personne.";
             card.appendChild(w);
           }
           el.appendChild(card);
@@ -1397,6 +1403,12 @@
         const k = ir.width / W;
         const box = dragBox(p.doc, fxId);
         const root = p.doc.getElementById(fxId);
+        // Stage effects (text behind the person, titles) live in source
+        // pixels on a stage that is itself scaled onto the canvas.
+        const stage = p.doc.getElementById("stage");
+        const sk = def.drag.stage && stage ? stage.getBoundingClientRect().width / stage.offsetWidth : 1;
+        // Its scrim, if any, travels with it.
+        const movers = [root, p.doc.getElementById(fxId + "-scrim")].filter(Boolean);
         const x0 = e.clientX;
         const y0 = e.clientY;
         const left = parseFloat(handle.style.left);
@@ -1413,7 +1425,7 @@
           handle.style.top = top + dy + "px";
           // Live feedback: the CSS `translate` property composes with the
           // transforms GSAP writes, so nothing else in the element moves.
-          if (root) root.style.translate = `${dx / k}px ${dy / k}px`;
+          for (const el of movers) el.style.translate = `${dx / k / sk}px ${dy / k / sk}px`;
         };
         const end = (ev, cancelled) => {
           window.removeEventListener("pointermove", move);
@@ -1424,7 +1436,7 @@
           dragging = null;
           const moved = Math.hypot(dx, dy) > 3;
           if (cancelled || !moved) {
-            if (root) root.style.translate = "";
+            for (const el of movers) el.style.translate = "";
             if (!cancelled) focusCard(fxId);
             return;
           }
@@ -1432,7 +1444,16 @@
           const cdx = dx / k;
           const cdy = dy / k;
           let params;
-          if (def.drag.delta) {
+          if (def.drag.stage) {
+            // Added to where the line is anchored, in source pixels.
+            const ax = Number(root.dataset.anchorX);
+            const ay = Number(root.dataset.anchorY);
+            params = {
+              [def.drag.key]: "free",
+              x: clamp(((ax + cdx / sk) / stage.offsetWidth) * 100),
+              y: clamp(((ay + cdy / sk) / stage.offsetHeight) * 100),
+            };
+          } else if (def.drag.delta) {
             const at = (key) => {
               const f = def.schema.find((x) => x.key === key);
               return Number(fx.params[key] ?? (f ? f.default : 50));
