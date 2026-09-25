@@ -208,6 +208,52 @@
       }
       .tl-empty { font-size: 12px; color: var(--muted); padding: 4px 2px; }
 
+      /* toolbar: mode + output format ------------------------------- */
+      .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 0 0 auto; }
+      .toolbar .grow { flex: 1; }
+      .toolbar label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+      .toolbar select { width: auto; font-size: 12px; padding: 4px 6px; }
+      /* display:flex would otherwise win over the hidden attribute */
+      .toolbar label[hidden], .shot-insp[hidden] { display: none; }
+      .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+      .seg button { border: 0; border-radius: 0; padding: 6px 12px; font-size: 12.5px; background: var(--panel); color: var(--muted); }
+      .seg button.on { background: var(--accent); color: #fff; }
+
+      /* sequence strip ------------------------------------------------ */
+      .shot {
+        position: absolute; top: 2px; bottom: 2px;
+        background: linear-gradient(180deg, #5a4bd6, #4638b0);
+        border-radius: 4px; overflow: hidden; cursor: pointer;
+        display: flex; align-items: center; padding: 0 10px;
+        font-size: 10.5px; color: #eeeaff; white-space: nowrap;
+        box-shadow: inset -1px 0 0 rgba(0,0,0,.35);
+      }
+      .shot.on { outline: 2px solid #b8adff; outline-offset: -2px; }
+      .shot .tr {
+        position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+        background: repeating-linear-gradient(180deg, #fff 0 3px, transparent 3px 6px); opacity: .7;
+      }
+      .shot .tr.black { background: repeating-linear-gradient(180deg, #000 0 3px, #888 3px 6px); }
+      .seq-track { height: 30px; }
+      .seq-track .tl-track { height: 30px; }
+      .shot-insp {
+        display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+        background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 8px 12px; font-size: 12px; flex: 0 0 auto;
+      }
+      .shot-insp .title { font-weight: 600; margin-right: 4px; }
+      .shot-insp label { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+      .shot-insp input[type="number"] { width: 72px; padding: 4px 6px; font-size: 12px; }
+      .shot-insp select { width: auto; padding: 4px 6px; font-size: 12px; }
+      .shot-insp button { padding: 4px 9px; font-size: 12px; }
+      .shot-insp .grow { flex: 1; }
+      .vid .add-seq {
+        opacity: 0; border: 0; background: transparent; color: var(--muted);
+        cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 5px; white-space: nowrap;
+      }
+      .vid:hover .add-seq { opacity: 1; }
+      .vid .add-seq:hover { color: var(--text); background: rgba(90,75,214,.35); }
+
       .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
       .bar .grow { flex: 1; }
 
@@ -293,6 +339,18 @@
 
       <section class="col">
         <div class="stage">
+          <div class="toolbar">
+            <div class="seg" id="mode">
+              <button data-mode="clip" class="on" title="Un clip et ses effets">Clip</button>
+              <button data-mode="seq" title="Tous les plans du projet, enchaînés">Séquence</button>
+            </div>
+            <span class="grow"></span>
+            <label>Format <select id="f-aspect"></select></label>
+            <label>Taille <select id="f-size"></select></label>
+            <label>Cadrage <select id="f-fit"></select></label>
+            <label id="f-focus-wrap">Point focal <select id="f-focus"></select></label>
+            <label id="f-fill-wrap">Fond <select id="f-fill"></select></label>
+          </div>
           <div class="frame" id="frame">
             <div class="empty">Ajoute une vidéo pour commencer.</div>
           </div>
@@ -300,6 +358,11 @@
             <div id="tl-body"></div>
             <div class="tl-head" id="tl-head"></div>
           </div>
+          <div class="tl" id="seq" hidden>
+            <div id="seq-body"></div>
+            <div class="tl-head" id="seq-head"></div>
+          </div>
+          <div class="shot-insp" id="shot-insp" hidden></div>
           <div class="bar">
             <button id="play" disabled>Lecture</button>
             <button id="restart" disabled>⟲</button>
@@ -390,6 +453,9 @@
       let state = { videos: [], effects: [] };
       let selected = null;
       let playing = false;
+      // "clip": one clip and its effects. "seq": the project's shots, chained.
+      let mode = "clip";
+      let selectedShot = null;
 
       // ---------------------------------------------------------- render UI
 
@@ -410,11 +476,14 @@
               <div class="name">${escapeHtml(v.name)}</div>
               <div class="dim">${v.width}×${v.height} · ${v.duration.toFixed(1)}s · ${v.effects.length} effet${v.effects.length > 1 ? "s" : ""}${v.face ? "" : " · pas de visage"}</div>
             </div>
+            <button class="add-seq" title="Ajouter ce clip à la séquence">＋ Séq.</button>
             <button class="x" title="Supprimer">×</button>`;
           row.onclick = (e) => {
-            if (e.target.classList.contains("x")) return;
+            if (e.target.closest("button")) return;
+            if (mode !== "clip") setMode("clip");
             select(v.id);
           };
+          row.querySelector(".add-seq").onclick = () => addToSequence(v.id);
           row.querySelector(".x").onclick = async () => {
             if (!confirm(`Supprimer « ${v.name} » et ses fichiers ?`)) return;
             await api(`/api/videos/${v.id}`, { method: "DELETE" });
@@ -612,11 +681,19 @@
 
       // The container must be passed in: the library has its own frame, and a
       // hidden one measures zero, which would scale the iframe to nothing.
+      // The preview is the output canvas, whose size depends on the format —
+      // so it is read from the composition itself once it has loaded.
       function fitFrame(iframe, v, host) {
+        let w = v ? v.width : 1280;
+        let h = v ? v.height : 720;
+        try {
+          const root = iframe.contentDocument.getElementById("root");
+          if (root && root.dataset.width) { w = +root.dataset.width; h = +root.dataset.height; }
+        } catch { /* not loaded yet */ }
         const box = (host || iframe.parentElement || $("#frame")).getBoundingClientRect();
-        const scale = Math.min(box.width / v.width, box.height / v.height);
-        iframe.style.width = v.width + "px";
-        iframe.style.height = v.height + "px";
+        const scale = Math.min(box.width / w, box.height / h);
+        iframe.style.width = w + "px";
+        iframe.style.height = h + "px";
         iframe.style.transform = `scale(${scale})`;
       }
 
@@ -624,8 +701,8 @@
       // back to frame 0.
       function currentPreviewTime() {
         try {
-          const bg = $("#frame iframe").contentDocument.getElementById("bg");
-          return bg ? bg.currentTime : 0;
+          const w = $("#frame iframe").contentWindow;
+          return w.__studioTime ? w.__studioTime() : 0;
         } catch {
           return 0;
         }
@@ -645,14 +722,18 @@
       let previewToken = 0;
       async function preview(opts = {}) {
         const v = videoById(selected);
-        if (!v) return;
+        const seq = mode === "seq";
+        if (!seq && !v) return;
+        if (seq && !state.activeProject) return;
         const token = ++previewToken;
         const at = opts.at !== undefined ? opts.at : currentPreviewTime();
 
         setBusy(true);
         $("#prog").hidden = false;
         try {
-          const { job } = await api(`/api/videos/${v.id}/prepare`, { method: "POST" });
+          const { job } = await api(seq
+            ? `/api/projects/${state.activeProject}/prepare`
+            : `/api/videos/${v.id}/prepare`, { method: "POST" });
           await waitJob(job.id);
         } catch (error) {
           setBusy(false);
@@ -667,19 +748,31 @@
         frame.innerHTML = "";
         frame.classList.add("busy");
         const iframe = document.createElement("iframe");
-        iframe.src = `/preview/${v.id}?v=${Date.now()}#t=${at.toFixed(3)}`;
+        iframe.src = seq
+          ? `/preview-sequence/${state.activeProject}?v=${Date.now()}#t=${at.toFixed(3)}`
+          : `/preview/${v.id}?v=${Date.now()}#t=${at.toFixed(3)}`;
         iframe.onload = () => fitFrame(iframe, v, frame);
         frame.appendChild(iframe);
         fitFrame(iframe, v, frame);
         playing = false;
         $("#play").textContent = "Lecture";
         for (const id of ["play", "restart", "refresh", "render"]) $("#" + id).disabled = false;
+        if (seq && !state.sequence.shots.length) $("#render").disabled = true;
         // The iframe tells us once it has actually landed on `at`.
         setTimeout(() => setBusy(false), 2500);
       }
 
       window.addEventListener("message", (e) => {
-        if (e.data && e.data.type === "ready") setBusy(false);
+        if (e.data && e.data.type === "ready") {
+          setBusy(false);
+          // The canvas size is only known once the composition has loaded.
+          const iframe = $("#frame iframe");
+          if (iframe) fitFrame(iframe, videoById(selected), $("#frame"));
+        }
+        if (e.data && e.data.type === "ended") {
+          playing = false;
+          $("#play").textContent = "Lecture";
+        }
       });
 
       function post(msg) {
@@ -869,26 +962,27 @@
 
       // Playhead, read straight off the preview's background video.
       (function trackPlayhead() {
-        const head = $("#tl-head");
-        function frame() {
-          const v = videoById(selected);
-          const iframe = $("#frame iframe");
-          const ruler = document.querySelector(".tl-ruler .tl-track");
-          let t = null;
-          try {
-            const bg = iframe && iframe.contentDocument.getElementById("bg");
-            if (bg) t = bg.currentTime;
-          } catch { /* iframe mid-reload */ }
-
-          if (v && ruler && t !== null) {
-            const box = ruler.getBoundingClientRect();
-            const host = $("#tl").getBoundingClientRect();
-            head.style.display = "block";
-            head.style.left =
-              box.left - host.left + (t / v.duration) * box.width + "px";
-          } else {
+        function place(headSel, hostSel, rulerSel, duration, t) {
+          const head = $(headSel);
+          const ruler = document.querySelector(rulerSel);
+          if (!ruler || t === null || !duration || $(hostSel).hidden) {
             head.style.display = "none";
+            return;
           }
+          const box = ruler.getBoundingClientRect();
+          const host = $(hostSel).getBoundingClientRect();
+          head.style.display = "block";
+          head.style.left = box.left - host.left + (t / duration) * box.width + "px";
+        }
+        function frame() {
+          let t = null;
+          let duration = 0;
+          try {
+            const w = $("#frame iframe").contentWindow;
+            if (w.__studioTime) { t = w.__studioTime(); duration = w.__studioDuration; }
+          } catch { /* iframe mid-reload */ }
+          place("#tl-head", "#tl", "#tl .tl-ruler .tl-track", duration, mode === "clip" ? t : null);
+          place("#seq-head", "#seq", "#seq .tl-ruler .tl-track", duration, mode === "seq" ? t : null);
           requestAnimationFrame(frame);
         }
         requestAnimationFrame(frame);
@@ -1098,7 +1192,7 @@
             libCollection = id;
             const first = visiblePresets()[0];
             libPreset = first ? first.id : null;
-            drawLibrary();
+            drawEffectLibrary();
           };
           if (removable) {
             div.querySelector(".ren").onclick = async () => {
@@ -1149,7 +1243,7 @@
           item.onclick = (e) => {
             if (e.target.closest("button")) return;
             libPreset = preset.id;
-            drawLibrary();
+            drawEffectLibrary();
             previewPreset();
           };
           item.querySelector(".x").onclick = async () => {
@@ -1204,7 +1298,7 @@
         }
       }
 
-      function drawLibrary() {
+      function drawEffectLibrary() {
         drawCollections();
         drawLibraryList();
         drawLibraryEditor();
@@ -1365,7 +1459,7 @@
         $("#tab-lib").classList.toggle("on", which === "lib");
         if (which === "lib") {
           if (!libPreset) libPreset = visiblePresets()[0]?.id || null;
-          drawLibrary();
+          drawEffectLibrary();
           previewPreset();
         } else {
           const v = videoById(selected);
@@ -1375,6 +1469,268 @@
       }
       $("#tab-edit").onclick = () => showView("edit");
       $("#tab-lib").onclick = () => showView("lib");
+
+
+      // ============================================ format & sequence
+
+      // ----------------------------------------------------- output format
+
+      function drawFormat() {
+        if (!state.options || !state.sequence) return;
+        const f = state.sequence.format;
+        const fill = (sel, list, value) => {
+          const el = $(sel);
+          el.innerHTML = "";
+          for (const o of list) {
+            const opt = document.createElement("option");
+            opt.value = String(o.value);
+            opt.textContent = o.label;
+            if (String(o.value) === String(value)) opt.selected = true;
+            el.appendChild(opt);
+          }
+        };
+        fill("#f-aspect", state.options.aspects, f.aspect);
+        fill("#f-size", state.options.sizes, f.size);
+        fill("#f-fit", state.options.fits, f.fit);
+        fill("#f-focus", state.options.focuses, f.focus);
+        fill("#f-fill", state.options.fills, f.fill);
+        // Point focal only matters when cropping, the fill only with bands.
+        $("#f-focus-wrap").hidden = f.fit !== "cover";
+        $("#f-fill-wrap").hidden = f.fit !== "contain";
+      }
+
+      for (const [id, key] of [["#f-aspect", "aspect"], ["#f-size", "size"], ["#f-fit", "fit"],
+                               ["#f-focus", "focus"], ["#f-fill", "fill"]]) {
+        $(id).onchange = async () => {
+          const raw = $(id).value;
+          const value = key === "size" && raw !== "source" ? Number(raw) : raw;
+          await api(`/api/projects/${state.activeProject}/format`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ [key]: value }),
+          });
+          await refresh();
+          preview();
+        };
+      }
+
+      // ------------------------------------------------------------ mode
+
+      function setMode(next) {
+        mode = next;
+        for (const b of document.querySelectorAll("#mode button")) {
+          b.classList.toggle("on", b.dataset.mode === mode);
+        }
+        $("#tl").hidden = mode !== "clip" || !videoById(selected);
+        $("#seq").hidden = mode !== "seq";
+        $("#shot-insp").hidden = mode !== "seq" || !selectedShot;
+        $("#render").textContent = mode === "seq" ? "Rendre la séquence" : "Rendre le MP4";
+        drawSequence();
+      }
+
+      for (const b of document.querySelectorAll("#mode button")) {
+        b.onclick = () => { setMode(b.dataset.mode); preview({ at: 0 }); };
+      }
+
+      // ------------------------------------------------------------ shots
+
+      const clipOf = (shot) => state.videos.find((v) => v.id === shot.videoId);
+      const shotOut = (shot) => shot.out ?? (clipOf(shot)?.duration || 0);
+      const shotLength = (shot) => Math.max(0.1, shotOut(shot) - (shot.in || 0));
+
+      // Where each shot starts in the sequence.
+      function laidShots() {
+        let clock = 0;
+        return state.sequence.shots.filter(clipOf).map((shot) => {
+          const entry = { shot, start: clock, length: shotLength(shot) };
+          clock += entry.length;
+          return entry;
+        });
+      }
+
+      function drawSequence() {
+        const body = $("#seq-body");
+        if (!body) return;
+        body.innerHTML = "";
+        if (mode !== "seq" || !state.sequence) return;
+
+        const laid = laidShots();
+        const total = laid.reduce((t, x) => t + x.length, 0);
+
+        // ruler
+        const ruler = document.createElement("div");
+        ruler.className = "tl-row tl-ruler";
+        ruler.innerHTML = `<div class="tl-name">${total.toFixed(2)} s · ${laid.length} plan${laid.length > 1 ? "s" : ""}</div>`;
+        const rulerTrack = document.createElement("div");
+        rulerTrack.className = "tl-track";
+        if (total > 0) {
+          const step = total > 30 ? 5 : total > 12 ? 2 : total > 5 ? 1 : 0.5;
+          for (let t = 0; t < total - 0.01; t += step) {
+            const tick = document.createElement("div");
+            tick.className = "tl-tick";
+            tick.style.left = (t / total) * 100 + "%";
+            tick.textContent = Math.round(t * 10) / 10 + "s";
+            rulerTrack.appendChild(tick);
+          }
+          rulerTrack.onpointerdown = (e) => {
+            const r = rulerTrack.getBoundingClientRect();
+            post({ type: "seek", t: ((e.clientX - r.left) / r.width) * total });
+          };
+        }
+        ruler.appendChild(rulerTrack);
+        body.appendChild(ruler);
+
+        const row = document.createElement("div");
+        row.className = "tl-row seq-track";
+        row.innerHTML = '<div class="tl-name">Plans</div>';
+        const track = document.createElement("div");
+        track.className = "tl-track";
+
+        if (!laid.length) {
+          track.innerHTML = '<div class="tl-empty" style="padding:6px 10px">Vide — ajoute des plans avec « ＋ Séq. » dans la liste des vidéos.</div>';
+        }
+
+        for (const { shot, start, length } of laid) {
+          const clip = clipOf(shot);
+          const block = document.createElement("div");
+          block.className = "shot" + (shot.id === selectedShot ? " on" : "");
+          block.style.left = (start / total) * 100 + "%";
+          block.style.width = (length / total) * 100 + "%";
+          block.title = `${clip.name} · ${(+shot.in).toFixed(2)}s → ${shotOut(shot).toFixed(2)}s`;
+          block.innerHTML =
+            (shot.transition && shot.transition !== "cut" ? `<span class="tr ${shot.transition}"></span>` : "") +
+            `<span class="lbl">${escapeHtml(clip.name.replace(/\.[^.]+$/, ""))} · ${length.toFixed(1)}s</span>` +
+            '<span class="tl-h l"></span><span class="tl-h r"></span>';
+
+          block.onclick = (e) => {
+            if (e.target.classList.contains("tl-h")) return;
+            selectedShot = shot.id;
+            // Its clip's effects fill the right-hand column, ready to edit.
+            if (selected !== shot.videoId) { selected = shot.videoId; drawLibrary(); drawStack(); }
+            drawSequence();
+            drawShotInspector();
+            post({ type: "seek", t: start + Math.min(0.3, length / 2) });
+          };
+          attachTrim(block, track, shot, total);
+          track.appendChild(block);
+        }
+
+        row.appendChild(track);
+        body.appendChild(row);
+        drawShotInspector();
+      }
+
+      // Drag an edge of a shot to move its in or out point in its clip.
+      function attachTrim(block, track, shot, total) {
+        for (const handle of block.querySelectorAll(".tl-h")) {
+          handle.addEventListener("pointerdown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try { handle.setPointerCapture(e.pointerId); } catch { /* not critical */ }
+            const clip = clipOf(shot);
+            const perSec = track.getBoundingClientRect().width / total;
+            const startX = e.clientX;
+            const in0 = +shot.in || 0;
+            const out0 = shotOut(shot);
+            const left = handle.classList.contains("l");
+            let cutIn = in0;
+            let cutOut = out0;
+
+            const onMove = (ev) => {
+              const delta = (ev.clientX - startX) / perSec;
+              if (left) cutIn = Math.round(Math.max(0, Math.min(in0 + delta, out0 - 0.1)) * 20) / 20;
+              else cutOut = Math.round(Math.max(in0 + 0.1, Math.min(out0 + delta, clip.duration)) * 20) / 20;
+              block.style.width = ((cutOut - cutIn) / total) * 100 + "%";
+              block.querySelector(".lbl").textContent =
+                `${cutIn.toFixed(2)}s → ${cutOut.toFixed(2)}s`;
+            };
+            const onUp = async () => {
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+              try { handle.releasePointerCapture(e.pointerId); } catch { /* gone */ }
+              if (cutIn === in0 && cutOut === out0) return;
+              await patchShot(shot.id, left
+                ? { in: cutIn }
+                : { out: Math.abs(cutOut - clip.duration) < 0.02 ? null : cutOut });
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+          });
+        }
+      }
+
+      async function patchShot(shotId, body) {
+        await api(`/api/projects/${state.activeProject}/shots/${shotId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        await refresh();
+        preview();
+      }
+
+      function drawShotInspector() {
+        const el = $("#shot-insp");
+        const shots = state.sequence ? state.sequence.shots : [];
+        const index = shots.findIndex((x) => x.id === selectedShot);
+        const shot = shots[index];
+        el.hidden = mode !== "seq" || !shot;
+        if (!shot) { el.innerHTML = ""; return; }
+        const clip = clipOf(shot);
+
+        el.innerHTML = `
+          <span class="title">Plan ${index + 1}</span>
+          <span style="color:var(--muted)">${escapeHtml(clip ? clip.name : "clip manquant")}</span>
+          <label>Début <input type="number" id="si-in" step="0.05" min="0" value="${(+shot.in || 0).toFixed(2)}"></label>
+          <label>Fin <input type="number" id="si-out" step="0.05" min="0" value="${shotOut(shot).toFixed(2)}"></label>
+          <label>Entrée <select id="si-tr" ${index === 0 ? "disabled" : ""}></select></label>
+          <span class="grow"></span>
+          <button id="si-left" title="Avancer ce plan" ${index === 0 ? "disabled" : ""}>◀</button>
+          <button id="si-right" title="Reculer ce plan" ${index === shots.length - 1 ? "disabled" : ""}>▶</button>
+          <button id="si-edit" title="Ouvrir ce clip en mode Clip">Éditer le clip</button>
+          <button id="si-del" title="Retirer ce plan de la séquence">×</button>`;
+
+        const tr = $("#si-tr");
+        for (const o of state.options.transitions) {
+          const opt = document.createElement("option");
+          opt.value = o.value;
+          opt.textContent = o.label;
+          if (o.value === (shot.transition || "cut")) opt.selected = true;
+          tr.appendChild(opt);
+        }
+        tr.onchange = () => patchShot(shot.id, { transition: tr.value });
+        $("#si-in").onchange = () => patchShot(shot.id, { in: $("#si-in").valueAsNumber });
+        $("#si-out").onchange = () => {
+          const v = $("#si-out").valueAsNumber;
+          patchShot(shot.id, { out: clip && Math.abs(v - clip.duration) < 0.02 ? null : v });
+        };
+        $("#si-left").onclick = () => patchShot(shot.id, { index: index - 1 });
+        $("#si-right").onclick = () => patchShot(shot.id, { index: index + 1 });
+        $("#si-edit").onclick = async () => {
+          setMode("clip");
+          await select(shot.videoId);
+        };
+        $("#si-del").onclick = async () => {
+          await api(`/api/projects/${state.activeProject}/shots/${shot.id}`, { method: "DELETE" });
+          selectedShot = null;
+          await refresh();
+          preview();
+        };
+      }
+
+      async function addToSequence(videoId) {
+        const { shot } = await api(`/api/projects/${state.activeProject}/shots`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ videoId }),
+        });
+        selectedShot = shot.id;
+        await refresh();
+        setMode("seq");
+        const laid = laidShots();
+        const at = laid.find((x) => x.shot.id === shot.id);
+        preview({ at: at ? at.start + 0.2 : 0 });
+      }
 
       // ------------------------------------------------------------- wiring
 
@@ -1399,10 +1755,16 @@
         if (selected && !videoById(selected)) selected = null;
         drawTree();
         drawPresets();
-        if (!$("#view-lib").hidden) drawLibrary();
+        if (!$("#view-lib").hidden) drawEffectLibrary();
         drawLibrary();
         drawStack();
         drawTimeline();
+        drawFormat();
+        if (selectedShot && !(state.sequence?.shots || []).some((x) => x.id === selectedShot)) {
+          selectedShot = null;
+        }
+        drawSequence();
+        $("#tl").hidden = mode !== "clip" || !videoById(selected);
 
         if (focus) {
           const el = document.querySelector(
@@ -1475,7 +1837,7 @@
         // at frame 0 most of them have not animated in yet, which reads as
         // "nothing happened".
         const v = videoById(selected);
-        preview({ at: v ? showcaseTime(v, effect) : 0 });
+        preview(mode === "clip" && v ? { at: showcaseTime(v, effect) } : {});
 
         const card = document.querySelector(`.fx[data-fx="${effect.id}"]`);
         if (card) {
@@ -1489,7 +1851,9 @@
         $("#render").disabled = true;
         $("#prog").hidden = false;
         try {
-          const { job } = await api(`/api/videos/${selected}/render`, { method: "POST" });
+          const { job } = await api(mode === "seq"
+            ? `/api/projects/${state.activeProject}/render`
+            : `/api/videos/${selected}/render`, { method: "POST" });
           const done = await waitJob(job.id);
           setStatus(`Rendu terminé — <a href="${done.result.output}" download>télécharger le MP4</a>`);
         } catch (error) {

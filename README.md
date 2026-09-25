@@ -47,6 +47,51 @@ Three columns:
   any clip — and the **Bibliothèque d'effets** tab is where you build and sort
   them.
 
+## Output format
+
+The toolbar above the preview sets the project's output format — used by the
+clip preview, the sequence preview and every render.
+
+| Control | Options |
+|---|---|
+| **Format** | Source · 16:9 · 9:16 · 1:1 · 4:5 |
+| **Taille** | Source · 720p · 1080p — the short side of the canvas |
+| **Cadrage** | *Remplir* crops to fill the frame · *Adapter* shows the whole frame with bands |
+| **Point focal** | (Remplir) *Sur le visage* keeps your face centred · *Au centre* |
+| **Fond** | (Adapter) a blurred copy of the footage, black or white |
+
+Each clip is composed on a **stage** at its own native size — the coordinates
+face detection measured and every effect is positioned in — and the stage is
+moved onto the canvas with a single transform. A 16:9 clip recropped to 9:16
+sits at ×1.78, but the footage, the text behind you and your cut-out move as
+one, so the occlusion stays exact. Effects know which part of the source is
+visible (`view`), so text shrinks and slides to stay on screen.
+
+Screen-anchored effects — lower third, vignette, grain, bands, fade — are drawn
+on the canvas instead, so they frame the output rather than the source.
+
+## Sequences
+
+**Séquence** mode chains shots into one video. `＋ Séq.` on a clip in the list
+appends it as a shot; the same clip can be used as many times as you like.
+
+- Drag a shot's **edges** to trim its in and out points in the clip.
+- Click a shot for its **inspector**: exact in/out, the transition into it
+  (*Coupe franche*, *Fondu au noir*, *Flash blanc*), ◀ ▶ to reorder, *Éditer
+  le clip* to jump to that clip's effects, × to remove it.
+- `Rendre la séquence` renders the whole chain in the project's format.
+
+Effects belong to the clip and are timed in clip time. A shot shows a window
+of its clip, so each effect is re-expressed in shot time; one that falls
+entirely outside the cut is simply absent from that shot. Text animations are
+fitted to their window: if a shot is too short for the whole entrance and
+exit, both are compressed rather than letting the last letters linger into the
+next shot.
+
+The preview mimics the HyperFrames runtime: every video and audio element is
+windowed by its `data-start` / `data-duration` / `data-media-start`, off one
+clock that follows the current shot's footage.
+
 ## The effect library
 
 The second tab is a page of its own, for making looks rather than using them.
@@ -189,12 +234,13 @@ server/server.mjs      HTTP + JSON API, zero dependencies
 server/ui/index.html   the interface
 lib/media.mjs          probe / face detection / person matte
 lib/timing.mjs         where an effect instance sits on the clip
+lib/format.mjs         output canvas, and how a clip is placed on it
 lib/store.mjs          folders, projects, presets — and safe persistence
 lib/guard.mjs          who may talk to the studio (Host / Origin)
 test/                  node --test, no dependencies
 lib/effects.mjs        graphics catalogue — add new effects here
 lib/effects-image.mjs  image treatments (filters, grain, vignette…)
-lib/compose.mjs        state + effects  →  HyperFrames composition
+lib/compose.mjs        shots + effects + format  →  HyperFrames composition
 tools/facedet.swift    face box per frame          (Vision)
 tools/personmatte.swift person cut out per frame   (Vision)
 studio.json            your library and its effect stacks
