@@ -1,0 +1,14 @@
+node_modules/
+.transcode-cache/
+
+# generated composition (root only — NOT server/ui/index.html)
+/index.html
+
+# local library, media and outputs
+studio.json
+media/
+renders/
+
+# compiled Swift helpers, rebuilt on first run
+tools/facedet
+tools/personmatte

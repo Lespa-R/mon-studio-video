@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Studio</title>
+    <style>
+      :root {
+        --bg: #0d1017;
+        --panel: #151a23;
+        --panel-2: #1b212c;
+        --line: #262e3b;
+        --text: #e7ecf3;
+        --muted: #8b97a8;
+        --accent: #4f8cff;
+        --danger: #ff5f56;
+        --ok: #3ddc84;
+        --radius: 10px;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        background: var(--bg); color: var(--text);
+        font: 14px/1.5 -apple-system, "SF Pro Text", system-ui, sans-serif;
+        height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+      }
+      header {
+        display: flex; align-items: center; gap: 12px;
+        padding: 14px 20px; border-bottom: 1px solid var(--line);
+      }
+      header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+      header .sub { color: var(--muted); font-size: 13px; }
+
+      main { flex: 1; display: grid; grid-template-columns: 260px 1fr 340px; min-height: 0; }
+      .col { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+      .col + .col { border-left: 1px solid var(--line); }
+      .col h2 {
+        font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--muted); padding: 14px 16px 8px; font-weight: 600;
+      }
+      .scroll { overflow-y: auto; padding: 0 12px 16px; flex: 1; }
+
+      /* projects ------------------------------------------------------ */
+      .tree { padding: 0 8px 10px; }
+      .tree-row {
+        display: flex; align-items: center; gap: 6px;
+        padding: 5px 8px; border-radius: 7px; cursor: pointer;
+        font-size: 13px; border: 1px solid transparent;
+      }
+      .tree-row:hover { background: var(--panel); }
+      .tree-row.on { background: var(--panel-2); border-color: var(--accent); }
+      .tree-row.folder { color: var(--muted); font-size: 11.5px;
+        text-transform: uppercase; letter-spacing: .06em; cursor: default; margin-top: 6px; }
+      .tree-row.folder:hover { background: transparent; }
+      .tree-row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tree-row .count { font-size: 11px; color: var(--muted); }
+      .tree-row .x, .tree-row .ren {
+        opacity: 0; border: 0; background: transparent; color: var(--muted);
+        cursor: pointer; font-size: 13px; padding: 1px 4px; border-radius: 5px;
+      }
+      .tree-row:hover .x, .tree-row:hover .ren { opacity: 1; }
+      .tree-row .x:hover { color: var(--danger); background: rgba(255,95,86,.12); }
+      .tree-row .ren:hover { color: var(--text); background: var(--panel-2); }
+      .tree-row.project { padding-left: 16px; }
+      .tree-actions { display: flex; gap: 6px; padding: 0 12px 10px; }
+      .tree-actions button { flex: 1; font-size: 12px; padding: 5px 8px; }
+
+      /* presets ------------------------------------------------------- */
+      .presets { padding: 0 12px 10px; display: grid; gap: 4px; }
+      .preset {
+        display: flex; align-items: center; gap: 6px; font-size: 12px;
+        color: var(--muted); padding: 3px 6px; border-radius: 6px;
+      }
+      .preset:hover { background: var(--panel); color: var(--text); }
+      .preset .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .preset .x { opacity: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+      .preset:hover .x { opacity: 1; }
+      .preset .x:hover { color: var(--danger); }
+
+      /* library ------------------------------------------------------- */
+      #drop {
+        margin: 0 12px 12px; padding: 22px 14px; text-align: center;
+        border: 1.5px dashed var(--line); border-radius: var(--radius);
+        color: var(--muted); cursor: pointer; transition: .15s;
+      }
+      #drop:hover, #drop.over { border-color: var(--accent); color: var(--text); background: var(--panel); }
+      #drop small { display: block; margin-top: 4px; font-size: 12px; opacity: .7; }
+
+      .vid {
+        display: flex; gap: 10px; align-items: center;
+        padding: 9px 10px; border-radius: 8px; cursor: pointer; margin-bottom: 4px;
+        border: 1px solid transparent;
+      }
+      .vid:hover { background: var(--panel); }
+      .vid.on { background: var(--panel-2); border-color: var(--accent); }
+      .vid .meta { flex: 1; min-width: 0; }
+      .vid .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .vid .dim { font-size: 11px; color: var(--muted); }
+      .vid .x {
+        opacity: 0; border: 0; background: transparent; color: var(--muted);
+        cursor: pointer; font-size: 16px; padding: 2px 4px; border-radius: 5px;
+      }
+      .vid:hover .x { opacity: 1; }
+      .vid .x:hover { color: var(--danger); background: rgba(255,95,86,.12); }
+
+      /* stage --------------------------------------------------------- */
+      .stage { flex: 1; display: flex; flex-direction: column; padding: 16px; min-height: 0; gap: 12px; }
+      .frame {
+        flex: 1; min-height: 0; background: #000; border-radius: var(--radius);
+        overflow: hidden; display: flex; align-items: center; justify-content: center;
+        border: 1px solid var(--line); position: relative;
+      }
+      /* flex:none keeps the iframe at its full composition size so the scale()
+         transform is the only thing resizing it */
+      .frame iframe { border: 0; flex: 0 0 auto; transform-origin: center center; }
+      .frame .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 20px; }
+      .frame::after {
+        content: "mise à jour…"; position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(13,16,23,.55); color: var(--muted); font-size: 12px;
+        opacity: 0; pointer-events: none; transition: opacity .18s;
+      }
+      .frame.busy::after { opacity: 1; }
+      .fx.flash { animation: flash 1.1s ease-out; }
+      @keyframes flash {
+        from { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,140,255,.18); }
+        to { border-color: var(--line); box-shadow: none; }
+      }
+      /* timeline ------------------------------------------------------ */
+      .tl {
+        position: relative; background: var(--panel); border: 1px solid var(--line);
+        border-radius: var(--radius); padding: 8px 12px 10px; flex: 0 0 auto;
+        max-height: 180px; overflow-y: auto; user-select: none;
+      }
+      .tl-row { display: grid; grid-template-columns: 118px 1fr; align-items: center; gap: 10px; height: 26px; }
+      .tl-row + .tl-row { margin-top: 3px; }
+      .tl-name {
+        font-size: 11.5px; color: var(--muted); white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis;
+      }
+      .tl-row.off .tl-name { opacity: .45; }
+      .tl-track {
+        position: relative; height: 20px; border-radius: 5px;
+        background: #11161e; box-shadow: inset 0 0 0 1px var(--line);
+      }
+      .tl-ruler { height: 16px; }
+      .tl-ruler .tl-track { background: transparent; box-shadow: none; }
+      .tl-tick {
+        position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line);
+        font-size: 10px; color: var(--muted); padding-left: 4px; line-height: 16px;
+      }
+      .tl-bar {
+        position: absolute; top: 2px; bottom: 2px;
+        background: linear-gradient(180deg, #3f7ae0, #2f62bd);
+        border-radius: 4px; cursor: grab; overflow: hidden;
+        display: flex; align-items: center; padding: 0 8px;
+        font-size: 10.5px; color: #eaf1ff; white-space: nowrap;
+      }
+      .tl-bar:active { cursor: grabbing; }
+      .tl-bar.fixed { background: #2b3444; color: var(--muted); cursor: default; }
+      .tl-row.off .tl-bar { filter: grayscale(1); opacity: .4; }
+      .tl-h {
+        position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize;
+      }
+      .tl-h.l { left: 0; } .tl-h.r { right: 0; }
+      .tl-h::after {
+        content: ""; position: absolute; top: 5px; bottom: 5px; left: 2px;
+        width: 2px; border-radius: 1px; background: rgba(255,255,255,.55);
+      }
+      .tl-head {
+        position: absolute; top: 8px; bottom: 8px; width: 1px;
+        background: var(--ok); pointer-events: none; display: none;
+      }
+      .tl-head::before {
+        content: ""; position: absolute; top: 0; left: -3px;
+        border: 3.5px solid transparent; border-top-color: var(--ok);
+      }
+      .tl-empty { font-size: 12px; color: var(--muted); padding: 4px 2px; }
+
+      .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .bar .grow { flex: 1; }
+
+      button {
+        font: inherit; font-size: 13px; padding: 7px 13px; border-radius: 8px;
+        border: 1px solid var(--line); background: var(--panel); color: var(--text);
+        cursor: pointer; transition: .12s;
+      }
+      button:hover:not(:disabled) { background: var(--panel-2); border-color: #33405280; }
+      button:disabled { opacity: .45; cursor: default; }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
+      button.primary:hover:not(:disabled) { filter: brightness(1.1); background: var(--accent); }
+
+      .status { font-size: 12px; color: var(--muted); min-height: 18px; }
+      .status.err { color: var(--danger); }
+      .status a { color: var(--ok); }
+      progress { width: 160px; height: 5px; accent-color: var(--accent); }
+
+      /* effects ------------------------------------------------------- */
+      .add { display: flex; gap: 6px; padding: 0 12px 10px; }
+      select, input[type="text"], input[type="number"] {
+        font: inherit; font-size: 13px; background: var(--panel); color: var(--text);
+        border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px; width: 100%;
+      }
+      .fx { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; }
+      .fx-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+      .fx-head input.t {
+        flex: 1; width: auto; font-size: 13px; font-weight: 500;
+        background: transparent; border: 1px solid transparent; color: var(--text);
+        padding: 3px 6px; border-radius: 6px;
+      }
+      .fx-head input.t:hover { border-color: var(--line); }
+      .fx-head input.t:focus { border-color: var(--accent); background: var(--bg); outline: none; }
+      .fx-head input.t::placeholder { color: var(--text); opacity: 1; }
+      .fx-head .star { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 5px; border-radius: 5px; font-size: 13px; }
+      .fx-head .star:hover { color: #ffc857; background: rgba(255,200,87,.12); }
+      .fx-head .x { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 5px; border-radius: 5px; }
+      .fx-head .x:hover { color: var(--danger); background: rgba(255,95,86,.12); }
+      .fx-body { padding: 0 12px 12px; display: grid; gap: 9px; }
+      .field { display: grid; grid-template-columns: 104px 1fr; align-items: center; gap: 8px; }
+      .field label { font-size: 12px; color: var(--muted); }
+      .field input.val {
+        width: 52px; flex: 0 0 52px; font-size: 11px; padding: 3px 4px;
+        text-align: right; color: var(--muted);
+      }
+      .field input.val:focus { color: var(--text); }
+      input[type="range"] { width: 100%; accent-color: var(--accent); }
+      input[type="color"] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+      .rangewrap { display: flex; align-items: center; gap: 7px; }
+      .rangewrap input[type="range"] { flex: 1; min-width: 0; }
+      .hint { font-size: 11.5px; color: var(--muted); padding: 0 12px 10px; }
+      .warn { color: #ffb454; }
+      .none { color: var(--muted); font-size: 13px; padding: 4px 4px 12px; }
+      input[type="checkbox"] { accent-color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Studio</h1>
+      <span class="sub" id="head-sub">bibliothèque locale · rendu HyperFrames</span>
+    </header>
+
+    <main>
+      <section class="col">
+        <h2>Projets</h2>
+        <div class="tree" id="tree"></div>
+        <div class="tree-actions">
+          <button id="new-project">+ Projet</button>
+          <button id="new-folder">+ Dossier</button>
+        </div>
+        <h2>Vidéos</h2>
+        <div id="drop">
+          Glisse tes vidéos ici
+          <small>ou clique pour choisir</small>
+        </div>
+        <input type="file" id="file" accept="video/*" multiple hidden />
+        <div class="scroll" id="library"></div>
+      </section>
+
+      <section class="col">
+        <div class="stage">
+          <div class="frame" id="frame">
+            <div class="empty">Ajoute une vidéo pour commencer.</div>
+          </div>
+          <div class="tl" id="tl" hidden>
+            <div id="tl-body"></div>
+            <div class="tl-head" id="tl-head"></div>
+          </div>
+          <div class="bar">
+            <button id="play" disabled>Lecture</button>
+            <button id="restart" disabled>⟲</button>
+            <button id="refresh" disabled>Actualiser l'aperçu</button>
+            <span class="grow"></span>
+            <button id="render" class="primary" disabled>Rendre le MP4</button>
+          </div>
+          <div class="bar">
+            <progress id="prog" value="0" max="1" hidden></progress>
+            <span class="status" id="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="col">
+        <h2>Effets</h2>
+        <div class="add">
+          <select id="fx-type"></select>
+          <button id="fx-add" disabled>Ajouter</button>
+        </div>
+        <div class="hint" id="fx-hint"></div>
+        <div class="presets" id="presets"></div>
+        <div class="scroll" id="stack"></div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (s) => document.querySelector(s);
+
+      // This page only works when the studio serves it. Opened straight off
+      // disk (file://) every relative API path fails to resolve, with an error
+      // that says nothing useful — so say it here instead.
+      const SERVED = location.protocol === "http:" || location.protocol === "https:";
+
+      const api = async (url, options) => {
+        let res;
+        try {
+          res = await fetch(url, options);
+        } catch (error) {
+          throw new Error(
+            "Le serveur ne répond pas. Lance « npm start » puis ouvre http://localhost:3002",
+          );
+        }
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || res.statusText);
+        return body;
+      };
+
+      let state = { videos: [], effects: [] };
+      let selected = null;
+      let playing = false;
+
+      // ---------------------------------------------------------- render UI
+
+      function videoById(id) { return state.videos.find((v) => v.id === id) || null; }
+
+      function drawLibrary() {
+        const el = $("#library");
+        el.innerHTML = "";
+        if (!state.videos.length) {
+          el.innerHTML = '<div class="none">Aucune vidéo.</div>';
+          return;
+        }
+        for (const v of state.videos) {
+          const row = document.createElement("div");
+          row.className = "vid" + (v.id === selected ? " on" : "");
+          row.innerHTML = `
+            <div class="meta">
+              <div class="name">${escapeHtml(v.name)}</div>
+              <div class="dim">${v.width}×${v.height} · ${v.duration.toFixed(1)}s · ${v.effects.length} effet${v.effects.length > 1 ? "s" : ""}${v.face ? "" : " · pas de visage"}</div>
+            </div>
+            <button class="x" title="Supprimer">×</button>`;
+          row.onclick = (e) => {
+            if (e.target.classList.contains("x")) return;
+            select(v.id);
+          };
+          row.querySelector(".x").onclick = async () => {
+            if (!confirm(`Supprimer « ${v.name} » et ses fichiers ?`)) return;
+            await api(`/api/videos/${v.id}`, { method: "DELETE" });
+            if (selected === v.id) { selected = null; clearFrame(); }
+            await refresh();
+          };
+          el.appendChild(row);
+        }
+      }
+
+      function drawStack() {
+        const el = $("#stack");
+        const v = videoById(selected);
+        el.innerHTML = "";
+        $("#fx-add").disabled = !v;
+        if (!v) { el.innerHTML = '<div class="none">Sélectionne une vidéo.</div>'; return; }
+        if (!v.effects.length) { el.innerHTML = '<div class="none">Aucun effet. Ajoute-en un ci-dessus.</div>'; return; }
+
+        for (const fx of v.effects) {
+          const def = state.effects.find((e) => e.type === fx.type);
+          if (!def) continue;
+          const card = document.createElement("div");
+          card.className = "fx";
+          card.dataset.fx = fx.id;
+
+          const head = document.createElement("div");
+          head.className = "fx-head";
+          head.innerHTML = `
+            <input type="checkbox" class="on" ${fx.enabled !== false ? "checked" : ""} title="Activer" />
+            <input type="text" class="t" value="${escapeHtml(fx.name || "")}"
+                   placeholder="${escapeHtml(def.label)}" title="Renommer cet effet" />
+            <button class="star" title="Enregistrer comme préréglage">★</button>
+            <button class="x" title="Retirer">×</button>`;
+          head.querySelector(".on").onchange = (e) =>
+            patch(v.id, fx.id, { enabled: e.target.checked });
+
+          const nameInput = head.querySelector(".t");
+          nameInput.dataset.fx = fx.id;
+          nameInput.dataset.key = "__name";
+          nameInput.onchange = () => patch(v.id, fx.id, { name: nameInput.value });
+          nameInput.onkeydown = (e) => { if (e.key === "Enter") nameInput.blur(); };
+
+          head.querySelector(".star").onclick = async () => {
+            const name = prompt(
+              "Nom du préréglage", fx.name || def.label);
+            if (name === null) return;
+            await api("/api/presets", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ name, fromVideo: v.id, fromEffect: fx.id }),
+            });
+            await refresh();
+            fillEffectPicker();
+            setStatus(`Préréglage « ${name} » enregistré.`);
+          };
+
+          head.querySelector(".x").onclick = async () => {
+            await api(`/api/videos/${v.id}/effects/${fx.id}`, { method: "DELETE" });
+            await refresh();
+            preview();
+          };
+          card.appendChild(head);
+
+          const body = document.createElement("div");
+          body.className = "fx-body";
+          for (const f of def.schema) {
+            body.appendChild(field(v, fx, f));
+          }
+          card.appendChild(body);
+
+          if (def.needsMatte && !v.face) {
+            const w = document.createElement("div");
+            w.className = "hint warn";
+            w.textContent = "Aucun visage détecté sur ce clip : cet effet sera ignoré.";
+            card.appendChild(w);
+          }
+          el.appendChild(card);
+        }
+      }
+
+      function field(video, fx, f) {
+        const wrap = document.createElement("div");
+        wrap.className = "field";
+        const label = document.createElement("label");
+        label.textContent = f.label;
+        wrap.appendChild(label);
+        const tag = (el) => { el.dataset.fx = fx.id; el.dataset.key = f.key; return el; };
+
+        const value = fx.params[f.key] ?? f.default;
+        let input;
+
+        if (f.type === "select") {
+          input = document.createElement("select");
+          for (const o of f.options) {
+            const opt = document.createElement("option");
+            opt.value = o.value; opt.textContent = o.label;
+            if (String(value) === String(o.value)) opt.selected = true;
+            input.appendChild(opt);
+          }
+          input.onchange = () => patch(video.id, fx.id, { params: { [f.key]: input.value } });
+          wrap.appendChild(input);
+        } else if (f.type === "range") {
+          // Slider for feel, number box for precision — and the box accepts
+          // values beyond the slider's range when you need to push further.
+          const holder = document.createElement("div");
+          holder.className = "rangewrap";
+          input = document.createElement("input");
+          input.type = "range";
+          input.min = f.min; input.max = f.max; input.step = f.step; input.value = value;
+
+          const box = document.createElement("input");
+          box.type = "number";
+          box.className = "val";
+          box.step = f.step;
+          box.value = Number(value);
+
+          input.oninput = () => { box.value = Number(input.value); };
+          input.onchange = () => patch(video.id, fx.id, { params: { [f.key]: Number(input.value) } });
+          box.onchange = () => {
+            // valueAsNumber sidesteps locale decimal separators
+            const v = box.valueAsNumber;
+            if (!Number.isFinite(v)) return;
+            input.value = v;
+            patch(video.id, fx.id, { params: { [f.key]: v } });
+          };
+
+          holder.appendChild(input); holder.appendChild(box);
+          wrap.appendChild(holder);
+        } else if (f.type === "color") {
+          input = document.createElement("input");
+          input.type = "color"; input.value = value;
+          input.onchange = () => patch(video.id, fx.id, { params: { [f.key]: input.value } });
+          wrap.appendChild(input);
+        } else {
+          input = document.createElement("input");
+          input.type = f.type === "number" ? "number" : "text";
+          if (f.step !== undefined) input.step = f.step;
+          if (f.min !== undefined) input.min = f.min;
+          input.value = value;
+          input.onchange = () =>
+            patch(video.id, fx.id, {
+              params: { [f.key]: f.type === "number" ? Number(input.value) : input.value },
+            });
+          wrap.appendChild(input);
+        }
+        // Tag every control so refresh() can put the caret back where it was.
+        wrap.querySelectorAll("input, select").forEach(tag);
+        return wrap;
+      }
+
+      // Coalesce bursts of edits — arrow keys on a number box fire one change
+      // each, and every one of them would otherwise trigger a full rebuild.
+      const pending = new Map();
+      let patchTimer = null;
+
+      async function patch(videoId, fxId, body) {
+        const key = `${videoId}:${fxId}`;
+        const merged = pending.get(key) || { params: {} };
+        if (body.params) merged.params = { ...merged.params, ...body.params };
+        if (body.enabled !== undefined) merged.enabled = body.enabled;
+        if (body.name !== undefined) merged.name = body.name;
+        if (body.start !== undefined) merged.start = body.start;
+        if (body.duration !== undefined) merged.duration = body.duration;
+        pending.set(key, merged);
+
+        clearTimeout(patchTimer);
+        patchTimer = setTimeout(async () => {
+          const jobs = [...pending.entries()];
+          pending.clear();
+          try {
+            for (const [k, payload] of jobs) {
+              const [vid, fid] = k.split(":");
+              await api(`/api/videos/${vid}/effects/${fid}`, {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+            }
+          } catch (error) {
+            return setStatus(error.message, true);
+          }
+          await refresh();
+          preview();
+        }, 220);
+      }
+
+      // ------------------------------------------------------------ preview
+
+      function clearFrame() {
+        $("#frame").innerHTML = '<div class="empty">Ajoute une vidéo pour commencer.</div>';
+        $("#tl").hidden = true;
+        for (const id of ["play", "restart", "refresh", "render"]) $("#" + id).disabled = true;
+      }
+
+      function fitFrame(iframe, v) {
+        const box = $("#frame").getBoundingClientRect();
+        const scale = Math.min(box.width / v.width, box.height / v.height);
+        iframe.style.width = v.width + "px";
+        iframe.style.height = v.height + "px";
+        iframe.style.transform = `scale(${scale})`;
+      }
+
+      // Where the preview currently sits, so an edit does not send the viewer
+      // back to frame 0.
+      function currentPreviewTime() {
+        try {
+          const bg = $("#frame iframe").contentDocument.getElementById("bg");
+          return bg ? bg.currentTime : 0;
+        } catch {
+          return 0;
+        }
+      }
+
+      const setBusy = (on) => $("#frame").classList.toggle("busy", on);
+
+      // A moment where the effect actually reads: past its entrance, but still
+      // inside its window.
+      function showcaseTime(v, fx) {
+        const start = Number(fx.start) || 0;
+        const dur = fx.duration == null ? Math.max(0.1, v.duration - start) : Number(fx.duration);
+        const entry = Number(fx.params?.reveal ?? 0.5) + 0.25;
+        return Math.min(start + Math.max(entry, dur * 0.35), start + dur * 0.75, v.duration - 0.05);
+      }
+
+      let previewToken = 0;
+      async function preview(opts = {}) {
+        const v = videoById(selected);
+        if (!v) return;
+        const token = ++previewToken;
+        const at = opts.at !== undefined ? opts.at : currentPreviewTime();
+
+        setBusy(true);
+        $("#prog").hidden = false;
+        try {
+          const { job } = await api(`/api/videos/${v.id}/prepare`, { method: "POST" });
+          await waitJob(job.id);
+        } catch (error) {
+          setBusy(false);
+          $("#prog").hidden = true;
+          return setStatus(error.message, true);
+        }
+        if (token !== previewToken) return;
+
+        $("#prog").hidden = true;
+        setStatus("");
+        const frame = $("#frame");
+        frame.innerHTML = "";
+        frame.classList.add("busy");
+        const iframe = document.createElement("iframe");
+        iframe.src = `/preview/${v.id}?v=${Date.now()}#t=${at.toFixed(3)}`;
+        iframe.onload = () => fitFrame(iframe, v);
+        frame.appendChild(iframe);
+        fitFrame(iframe, v);
+        playing = false;
+        $("#play").textContent = "Lecture";
+        for (const id of ["play", "restart", "refresh", "render"]) $("#" + id).disabled = false;
+        // The iframe tells us once it has actually landed on `at`.
+        setTimeout(() => setBusy(false), 2500);
+      }
+
+      window.addEventListener("message", (e) => {
+        if (e.data && e.data.type === "ready") setBusy(false);
+      });
+
+      function post(msg) {
+        const iframe = $("#frame iframe");
+        if (iframe) iframe.contentWindow.postMessage(msg, "*");
+      }
+
+      // --------------------------------------------------------------- jobs
+
+      function setStatus(text, isError) {
+        const el = $("#status");
+        el.className = "status" + (isError ? " err" : "");
+        el.innerHTML = text;
+      }
+
+      function waitJob(id) {
+        return new Promise((resolve, reject) => {
+          const tick = async () => {
+            let job;
+            try { job = await api(`/api/jobs/${id}`); } catch (e) { return reject(e); }
+            $("#prog").value = job.progress || 0;
+            if (job.message) setStatus(job.message);
+            if (job.status === "done") return resolve(job);
+            if (job.status === "error") return reject(new Error(job.error));
+            setTimeout(tick, 350);
+          };
+          tick();
+        });
+      }
+
+
+      // ----------------------------------------------------------- timeline
+
+      const SNAP = 0.05;
+      const snap = (v) => Math.round(v / SNAP) * SNAP;
+
+      function drawTimeline() {
+        const tl = $("#tl");
+        const body = $("#tl-body");
+        const v = videoById(selected);
+        body.innerHTML = "";
+        if (!v) { tl.hidden = true; return; }
+        tl.hidden = false;
+
+        // ruler
+        const ruler = document.createElement("div");
+        ruler.className = "tl-row tl-ruler";
+        ruler.innerHTML = '<div class="tl-name">' + v.duration.toFixed(2) + ' s</div>';
+        const rulerTrack = document.createElement("div");
+        rulerTrack.className = "tl-track";
+        const stepSec = v.duration > 12 ? 2 : v.duration > 5 ? 1 : 0.5;
+        for (let t = 0; t < v.duration - 0.01; t += stepSec) {
+          const tick = document.createElement("div");
+          tick.className = "tl-tick";
+          tick.style.left = (t / v.duration) * 100 + "%";
+          tick.textContent = (Math.round(t * 10) / 10) + "s";
+          rulerTrack.appendChild(tick);
+        }
+        rulerTrack.onpointerdown = (e) => seekFromPointer(e, rulerTrack, v);
+        ruler.appendChild(rulerTrack);
+        body.appendChild(ruler);
+
+        if (!v.effects.length) {
+          const none = document.createElement("div");
+          none.className = "tl-empty";
+          none.textContent = "Aucun effet à placer.";
+          body.appendChild(none);
+          return;
+        }
+
+        for (const fx of v.effects) {
+          const def = state.effects.find((e) => e.type === fx.type);
+          if (!def) continue;
+
+          const row = document.createElement("div");
+          row.className = "tl-row" + (fx.enabled === false ? " off" : "");
+          const name = document.createElement("div");
+          name.className = "tl-name";
+          name.textContent = fx.name || def.label;
+          name.title = fx.name ? `${fx.name} — ${def.label}` : def.label;
+          row.appendChild(name);
+
+          const track = document.createElement("div");
+          track.className = "tl-track";
+
+          const start = Number(fx.start) || 0;
+          const dur = fx.duration == null
+            ? Math.max(0.1, v.duration - start)
+            : Number(fx.duration);
+
+          const bar = document.createElement("div");
+          bar.className = "tl-bar" + (def.timed ? "" : " fixed");
+          bar.style.left = (start / v.duration) * 100 + "%";
+          bar.style.width = (dur / v.duration) * 100 + "%";
+          bar.textContent = def.timed
+            ? start.toFixed(2) + "s → " + (start + dur).toFixed(2) + "s"
+            : "tout le clip";
+
+          if (def.timed) {
+            bar.innerHTML +=
+              '<span class="tl-h l"></span><span class="tl-h r"></span>';
+            attachDrag(bar, track, v, fx);
+          } else {
+            bar.title = (fx.name || def.label) + " s'applique à toute la durée du clip.";
+          }
+
+          track.appendChild(bar);
+          // clicking empty track space scrubs the preview
+          track.onpointerdown = (e) => {
+            if (e.target === track) seekFromPointer(e, track, v);
+          };
+          row.appendChild(track);
+          body.appendChild(row);
+        }
+      }
+
+      function seekFromPointer(e, track, v) {
+        const r = track.getBoundingClientRect();
+        const t = Math.max(0, Math.min(((e.clientX - r.left) / r.width) * v.duration, v.duration));
+        post({ type: "seek", t });
+      }
+
+      // Drag the bar to move it, drag an edge to trim it. The DOM updates live;
+      // the server is only told once the pointer is released.
+      function attachDrag(bar, track, v, fx) {
+        bar.addEventListener("pointerdown", (e) => {
+          const handle = e.target.classList.contains("tl-h")
+            ? (e.target.classList.contains("l") ? "l" : "r")
+            : "move";
+          e.preventDefault();
+          e.stopPropagation();
+          // Without capture the drag dies the moment the pointer crosses the
+          // preview iframe, which swallows the events.
+          try { bar.setPointerCapture(e.pointerId); } catch { /* not critical */ }
+
+          const rect = track.getBoundingClientRect();
+          const perSec = rect.width / v.duration;
+          const startX = e.clientX;
+          const start0 = Number(fx.start) || 0;
+          const dur0 = fx.duration == null
+            ? Math.max(0.1, v.duration - start0)
+            : Number(fx.duration);
+
+          let start = start0;
+          let dur = dur0;
+
+          const onMove = (ev) => {
+            const delta = (ev.clientX - startX) / perSec;
+            if (handle === "move") {
+              start = snap(Math.max(0, Math.min(start0 + delta, v.duration - dur0)));
+              dur = dur0;
+            } else if (handle === "l") {
+              const limit = start0 + dur0 - 0.1;
+              start = snap(Math.max(0, Math.min(start0 + delta, limit)));
+              dur = snap(start0 + dur0 - start);
+            } else {
+              dur = snap(Math.max(0.1, Math.min(dur0 + delta, v.duration - start0)));
+              start = start0;
+            }
+            bar.style.left = (start / v.duration) * 100 + "%";
+            bar.style.width = (dur / v.duration) * 100 + "%";
+            bar.firstChild.nodeValue =
+              start.toFixed(2) + "s → " + (start + dur).toFixed(2) + "s";
+          };
+
+          const onUp = async () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            try { bar.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+            if (Math.abs(start - start0) < 0.001 && Math.abs(dur - dur0) < 0.001) return;
+            await api(`/api/videos/${v.id}/effects/${fx.id}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                start,
+                duration: Math.abs(start + dur - v.duration) < 0.02 ? null : dur,
+              }),
+            });
+            await refresh();
+            preview();
+          };
+
+          window.addEventListener("pointermove", onMove);
+          window.addEventListener("pointerup", onUp);
+        });
+      }
+
+      // Playhead, read straight off the preview's background video.
+      (function trackPlayhead() {
+        const head = $("#tl-head");
+        function frame() {
+          const v = videoById(selected);
+          const iframe = $("#frame iframe");
+          const ruler = document.querySelector(".tl-ruler .tl-track");
+          let t = null;
+          try {
+            const bg = iframe && iframe.contentDocument.getElementById("bg");
+            if (bg) t = bg.currentTime;
+          } catch { /* iframe mid-reload */ }
+
+          if (v && ruler && t !== null) {
+            const box = ruler.getBoundingClientRect();
+            const host = $("#tl").getBoundingClientRect();
+            head.style.display = "block";
+            head.style.left =
+              box.left - host.left + (t / v.duration) * box.width + "px";
+          } else {
+            head.style.display = "none";
+          }
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      })();
+
+
+      // ------------------------------------------------- projects & folders
+
+      function drawTree() {
+        const el = $("#tree");
+        el.innerHTML = "";
+
+        const render = (project) => {
+          const row = document.createElement("div");
+          row.className = "tree-row project" + (project.id === state.activeProject ? " on" : "");
+          row.innerHTML = `
+            <span class="grow">${escapeHtml(project.name)}</span>
+            <span class="count">${project.videoCount}</span>
+            <button class="ren" title="Renommer">✎</button>
+            <button class="x" title="Supprimer">×</button>`;
+          row.onclick = async (e) => {
+            if (e.target.closest("button")) return;
+            await api(`/api/projects/${project.id}/activate`, { method: "POST" });
+            selected = null;
+            await refresh();
+            const v = state.videos[0];
+            if (v) await select(v.id); else clearFrame();
+          };
+          row.querySelector(".ren").onclick = async () => {
+            const name = prompt("Nom du projet", project.name);
+            if (name === null) return;
+            await api(`/api/projects/${project.id}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ name }),
+            });
+            await refresh();
+          };
+          row.querySelector(".x").onclick = async () => {
+            if (!confirm(`Supprimer « ${project.name} » et ses ${project.videoCount} vidéo(s) ?`)) return;
+            await api(`/api/projects/${project.id}`, { method: "DELETE" });
+            selected = null;
+            await refresh();
+            const v = state.videos[0];
+            if (v) await select(v.id); else clearFrame();
+          };
+          return row;
+        };
+
+        // root-level projects first, then one block per folder
+        for (const p of state.projects.filter((p) => !p.folderId)) el.appendChild(render(p));
+
+        for (const folder of state.folders) {
+          const head = document.createElement("div");
+          head.className = "tree-row folder";
+          head.innerHTML = `
+            <span class="grow">${escapeHtml(folder.name)}</span>
+            <button class="ren" title="Renommer">✎</button>
+            <button class="x" title="Supprimer le dossier">×</button>`;
+          head.querySelector(".ren").onclick = async () => {
+            const name = prompt("Nom du dossier", folder.name);
+            if (name === null) return;
+            await api(`/api/folders/${folder.id}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ name }),
+            });
+            await refresh();
+          };
+          head.querySelector(".x").onclick = async () => {
+            if (!confirm(`Supprimer le dossier « ${folder.name} » ? Les projets qu'il contient sont conservés.`)) return;
+            await api(`/api/folders/${folder.id}`, { method: "DELETE" });
+            await refresh();
+          };
+          el.appendChild(head);
+          for (const p of state.projects.filter((p) => p.folderId === folder.id)) {
+            el.appendChild(render(p));
+          }
+        }
+      }
+
+      $("#new-project").onclick = async () => {
+        const name = prompt("Nom du projet", "Nouveau projet");
+        if (name === null) return;
+        const folders = state.folders;
+        let folderId = null;
+        if (folders.length) {
+          const choice = prompt(
+            "Dans quel dossier ? Laisse vide pour la racine.\n" +
+            folders.map((f, i) => `${i + 1}. ${f.name}`).join("\n"), "");
+          const idx = Number(choice) - 1;
+          if (folders[idx]) folderId = folders[idx].id;
+        }
+        await api("/api/projects", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, folderId }),
+        });
+        selected = null;
+        await refresh();
+        clearFrame();
+      };
+
+      $("#new-folder").onclick = async () => {
+        const name = prompt("Nom du dossier", "Nouveau dossier");
+        if (name === null) return;
+        await api("/api/folders", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        await refresh();
+      };
+
+      // -------------------------------------------------------- my presets
+
+      function drawPresets() {
+        const el = $("#presets");
+        el.innerHTML = "";
+        if (!state.presets.length) return;
+        for (const preset of state.presets) {
+          const def = state.effects.find((e) => e.type === preset.type);
+          const row = document.createElement("div");
+          row.className = "preset";
+          row.innerHTML = `
+            <span class="grow">★ ${escapeHtml(preset.name)}</span>
+            <span style="font-size:10.5px;opacity:.7">${escapeHtml(def ? def.label : preset.type)}</span>
+            <button class="x" title="Supprimer le préréglage">×</button>`;
+          row.querySelector(".x").onclick = async () => {
+            await api(`/api/presets/${preset.id}`, { method: "DELETE" });
+            await refresh();
+            fillEffectPicker();
+          };
+          el.appendChild(row);
+        }
+      }
+
+      function fillEffectPicker() {
+        const sel = $("#fx-type");
+        const keep = sel.value;
+        sel.innerHTML = "";
+
+        const base = document.createElement("optgroup");
+        base.label = "Effets";
+        for (const e of state.effects) {
+          const opt = document.createElement("option");
+          opt.value = "type:" + e.type;
+          opt.textContent = e.label;
+          base.appendChild(opt);
+        }
+        sel.appendChild(base);
+
+        if (state.presets.length) {
+          const mine = document.createElement("optgroup");
+          mine.label = "Mes préréglages";
+          for (const preset of state.presets) {
+            const opt = document.createElement("option");
+            opt.value = "preset:" + preset.id;
+            opt.textContent = "★ " + preset.name;
+            mine.appendChild(opt);
+          }
+          sel.appendChild(mine);
+        }
+        if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+        showEffectHint();
+      }
+
+      function showEffectHint() {
+        const value = $("#fx-type").value || "";
+        if (value.startsWith("preset:")) {
+          const preset = state.presets.find((p) => "preset:" + p.id === value);
+          const def = preset && state.effects.find((e) => e.type === preset.type);
+          $("#fx-hint").textContent = def
+            ? `Ton préréglage, basé sur « ${def.label} ».`
+            : "";
+          return;
+        }
+        const e = state.effects.find((x) => "type:" + x.type === value);
+        $("#fx-hint").textContent = e ? e.hint : "";
+      }
+
+      // ------------------------------------------------------------- wiring
+
+      async function select(id) {
+        selected = id;
+        drawLibrary();
+        drawStack();
+        drawTimeline();
+        await preview();
+      }
+
+      async function refresh(opts = {}) {
+        // Redrawing the stack replaces every input, which would drop the field
+        // being edited. Remember it and put the caret back.
+        const active = document.activeElement;
+        const focus = active && active.dataset && active.dataset.key
+          ? { fx: active.dataset.fx, key: active.dataset.key,
+              at: active.selectionStart, kind: active.type }
+          : null;
+
+        state = await api("/api/state");
+        if (selected && !videoById(selected)) selected = null;
+        drawTree();
+        drawPresets();
+        drawLibrary();
+        drawStack();
+        drawTimeline();
+
+        if (focus) {
+          const el = document.querySelector(
+            `[data-fx="${focus.fx}"][data-key="${focus.key}"]`);
+          if (el) {
+            el.focus();
+            if (focus.at != null && el.type === focus.kind && el.setSelectionRange) {
+              try { el.setSelectionRange(focus.at, focus.at); } catch { /* number inputs */ }
+            }
+          }
+        }
+        $("#head-sub").textContent =
+          `${state.videos.length} vidéo(s) · ${state.effects.length} effets disponibles`;
+      }
+
+      async function upload(files) {
+        for (const file of files) {
+          setStatus(`Import de ${file.name}…`);
+          try {
+            const { video } = await api("/api/videos", {
+              method: "POST",
+              headers: { "x-filename": encodeURIComponent(file.name) },
+              body: file,
+            });
+            await refresh();
+            await select(video.id);
+          } catch (error) {
+            setStatus(error.message, true);
+            return;
+          }
+        }
+        setStatus("");
+      }
+
+      const drop = $("#drop");
+      drop.onclick = () => $("#file").click();
+      $("#file").onchange = (e) => upload([...e.target.files]);
+      ["dragenter", "dragover"].forEach((ev) =>
+        drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+      ["dragleave", "drop"].forEach((ev) =>
+        drop.addEventListener(ev, () => drop.classList.remove("over")));
+      drop.addEventListener("drop", (e) => {
+        e.preventDefault();
+        upload([...e.dataTransfer.files].filter((f) => f.type.startsWith("video/")));
+      });
+      document.addEventListener("dragover", (e) => e.preventDefault());
+      document.addEventListener("drop", (e) => e.preventDefault());
+
+      $("#play").onclick = () => {
+        playing = !playing;
+        post(playing ? "play" : "pause");
+        $("#play").textContent = playing ? "Pause" : "Lecture";
+      };
+      $("#restart").onclick = () => { playing = true; $("#play").textContent = "Pause"; post("restart"); };
+      $("#refresh").onclick = () => preview();
+
+      $("#fx-add").onclick = async () => {
+        const value = $("#fx-type").value || "";
+        const payload = value.startsWith("preset:")
+          ? { presetId: value.slice(7) }
+          : { type: value.slice(5) };
+        const { effect } = await api(`/api/videos/${selected}/effects`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        await refresh();
+
+        // Land the preview where the new effect is actually on screen —
+        // at frame 0 most of them have not animated in yet, which reads as
+        // "nothing happened".
+        const v = videoById(selected);
+        preview({ at: v ? showcaseTime(v, effect) : 0 });
+
+        const card = document.querySelector(`.fx[data-fx="${effect.id}"]`);
+        if (card) {
+          card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          card.classList.add("flash");
+          setTimeout(() => card.classList.remove("flash"), 1200);
+        }
+      };
+
+      $("#render").onclick = async () => {
+        $("#render").disabled = true;
+        $("#prog").hidden = false;
+        try {
+          const { job } = await api(`/api/videos/${selected}/render`, { method: "POST" });
+          const done = await waitJob(job.id);
+          setStatus(`Rendu terminé — <a href="${done.result.output}" download>télécharger le MP4</a>`);
+        } catch (error) {
+          setStatus(error.message, true);
+        } finally {
+          $("#prog").hidden = true;
+          $("#render").disabled = false;
+        }
+      };
+
+      // Space toggles playback unless a field has focus.
+      document.addEventListener("keydown", (e) => {
+        const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
+        if (e.code === "Space" && !typing && !$("#play").disabled) {
+          e.preventDefault();
+          $("#play").click();
+        }
+        if (e.key === "Home" && !typing) post({ type: "seek", t: 0 });
+      });
+
+      window.addEventListener("resize", () => {
+        const v = videoById(selected);
+        const iframe = $("#frame iframe");
+        if (v && iframe) fitFrame(iframe, v);
+      });
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      (async function boot() {
+        if (!SERVED) {
+          document.body.innerHTML = `
+            <div style="max-width:560px;margin:14vh auto;padding:0 24px;text-align:center">
+              <h1 style="font-size:17px;margin-bottom:10px">Ouvre le studio, pas le fichier</h1>
+              <p style="color:#8b97a8;font-size:14px;line-height:1.6">
+                Cette page est servie par le studio : ouverte directement depuis le
+                disque (<code>file://</code>), elle ne peut joindre aucune de ses API.
+              </p>
+              <p style="margin-top:20px">
+                <a href="http://localhost:3002"
+                   style="color:#4f8cff;font-size:15px">http://localhost:3002</a>
+              </p>
+              <p style="color:#8b97a8;font-size:13px;margin-top:18px">
+                Si rien ne répond, lance d'abord <code>npm start</code>.
+              </p>
+            </div>`;
+          return;
+        }
+        await refresh();
+        fillEffectPicker();
+        $("#fx-type").onchange = showEffectHint;
+        if (state.videos.length) {
+          const first = state.videos.find((v) => v.id === state.activeVideo) || state.videos[0];
+          await select(first.id);
+        }
+      })();
+    </script>
+  </body>
+</html>
