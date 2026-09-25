@@ -6,6 +6,8 @@ node_modules/
 
 # local library, media and outputs
 studio.json
+studio.*.json
+studio.json.tmp
 media/
 renders/
 

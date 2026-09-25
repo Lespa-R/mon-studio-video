@@ -610,11 +610,43 @@ async function servePresetPreview(res, presetId, videoId) {
   send(res, 200, playable(compose(solo, { bgFile: bg, fgFile: fg })), "text/html");
 }
 
+// ---------------------------------------------------------------- guard
+
+// The studio drives ffmpeg, writes to disk and deletes media, so only the
+// studio's own page may talk to it.
+//
+// Host: a page on another domain can rebind its DNS to 127.0.0.1 and reach us
+// under its own hostname; a Host we do not recognise is refused outright.
+// Origin: browsers attach it to every cross-site request, including the
+// "simple" POSTs that skip the CORS preflight. Absent (curl, the CLI) is fine —
+// the socket only listens on loopback, so that is a local process.
+let allowedHosts = new Set();
+let allowedOrigins = new Set();
+
+function trust(port) {
+  const hosts = [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`];
+  allowedHosts = new Set(hosts);
+  allowedOrigins = new Set(hosts.map((h) => `http://${h}`));
+}
+
+function refused(req) {
+  if (!allowedHosts.has(String(req.headers.host || "").toLowerCase())) return "hôte non autorisé";
+  const origin = req.headers.origin;
+  if (origin !== undefined && !allowedOrigins.has(origin.toLowerCase())) return "origine non autorisée";
+  return null;
+}
+
 // --------------------------------------------------------------------- main
 
 async function handler(req, res) {
   const url = new URL(req.url, "http://localhost");
   const p = url.pathname;
+
+  const reason = refused(req);
+  if (reason) {
+    console.warn(`  refusé (${reason}) : ${req.method} ${p} · host=${req.headers.host} origin=${req.headers.origin}`);
+    return send(res, 403, { error: `Requête refusée : ${reason}.` });
+  }
 
   try {
     if (p.startsWith("/api/")) return await handleApi(req, res, url);
@@ -648,7 +680,9 @@ function listen(server, port, attemptsLeft) {
         resolve(listen(server, port + 1, attemptsLeft - 1));
       } else reject(error);
     });
-    server.listen(port, () => resolve(port));
+    // Loopback only: without a host, Node listens on every interface and the
+    // studio is reachable by anyone on the same network.
+    server.listen(port, "127.0.0.1", () => resolve(port));
   });
 }
 
@@ -664,9 +698,18 @@ async function main() {
   await fsp.mkdir(RENDERS, { recursive: true });
   await store.load();
 
+  if (store.recovery) {
+    const { quarantined, restored, backup } = store.recovery;
+    console.warn(`\n  ⚠ studio.json était illisible. Mis de côté, intact : ${path.basename(quarantined)}`);
+    console.warn(restored
+      ? `    Restauré depuis la dernière sauvegarde valide (${path.basename(backup)}).`
+      : `    Aucune sauvegarde valide : démarrage sur une bibliothèque vide.`);
+  }
+
   const wanted = Number(process.env.PORT || process.argv[2] || 3002);
   const server = http.createServer(handler);
   const port = await listen(server, wanted, 12);
+  trust(port);
 
   console.log(`\n  Studio prêt    http://localhost:${port}`);
   const active = store.activeProject();
