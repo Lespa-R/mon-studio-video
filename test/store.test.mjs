@@ -24,9 +24,9 @@ test("v1 — a flat list of clips — is wrapped in a project, nothing lost", as
   const { file } = await tmpFile(JSON.stringify({ videos: [{ id: "vid_a", effects: [] }] }));
   const store = new Store(file);
   await store.load();
-  assert.equal(store.state.version, 4);
+  assert.equal(store.state.version, 5);
   assert.equal(store.state.projects[0].videos[0].id, "vid_a");
-  assert.deepEqual(store.state.projects[0].sequence.shots, []);
+  assert.equal(store.state.projects[0].format.aspect, "source");
 });
 
 test("v2 presets gain an empty collection on migration", async () => {
@@ -128,37 +128,28 @@ test("deleting a collection keeps its presets", async () => {
   assert.equal(store.preset(p.id).collectionId, null);
 });
 
-test("v3 projects gain an empty sequence in the default format", async () => {
+test("v3 projects gain the default output format", async () => {
   const { file } = await tmpFile(JSON.stringify({
     version: 3, projects: [{ id: "p", name: "P", videos: [] }], presets: [], collections: [],
   }));
   const store = new Store(file);
   await store.load();
-  assert.deepEqual(store.state.projects[0].sequence.shots, []);
-  assert.equal(store.state.projects[0].sequence.format.aspect, "source");
+  assert.equal(store.state.projects[0].format.aspect, "source");
 });
 
-test("a shot can only point at a clip of its own project", async () => {
-  const { file } = await tmpFile();
+test("v4 keeps the format a project had, and drops its sequence", async () => {
+  const { file } = await tmpFile(JSON.stringify({
+    version: 4,
+    projects: [{
+      id: "p", name: "P", videos: [],
+      sequence: { format: { aspect: "9:16", size: 1080 }, shots: [{ id: "sh", videoId: "v" }] },
+    }],
+    presets: [], collections: [],
+  }));
   const store = new Store(file);
   await store.load();
-  const project = store.activeProject();
-  project.videos.push({ id: "vid_a" });
-  assert.ok(store.addShot(project, "vid_a"));
-  assert.equal(store.addShot(project, "vid_elsewhere"), null);
-});
-
-test("shots can be reordered, and a clip leaving takes its shots with it", async () => {
-  const { file } = await tmpFile();
-  const store = new Store(file);
-  await store.load();
-  const project = store.activeProject();
-  project.videos.push({ id: "vid_a" }, { id: "vid_b" });
-  const a = store.addShot(project, "vid_a");
-  const b = store.addShot(project, "vid_b");
-  const a2 = store.addShot(project, "vid_a", { in: 1 });
-  store.moveShot(project, a2.id, 0);
-  assert.deepEqual(project.sequence.shots.map((s) => s.id), [a2.id, a.id, b.id]);
-  store.forgetClip(project, "vid_a");
-  assert.deepEqual(project.sequence.shots.map((s) => s.id), [b.id]);
+  const project = store.state.projects[0];
+  assert.equal(project.format.aspect, "9:16");
+  assert.equal(project.format.size, 1080);
+  assert.equal(project.sequence, undefined);
 });

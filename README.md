@@ -41,6 +41,15 @@ Three columns:
   **Rename any effect** by typing over its title — the name follows it into the
   timeline. Leave it empty to fall back to the catalogue label.
 
+  **Copy effects from one clip to another.** *Copier les effets* copies the
+  whole stack of the clip you are on; ⧉ on a card copies just that effect.
+  Select another clip and *Coller* — if it already has effects, you choose
+  between adding the copies after them or replacing them. The clipboard holds
+  the effects themselves, not a link to their clip, so it survives the source
+  being deleted and works across projects. Each pasted effect is rebuilt from
+  its type's schema and gets an id of its own; a window longer than the target
+  clip runs to its end.
+
   **★ saves the effect as a preset**: its type and its current parameters, under
   a name you choose. Presets appear under *Mes préréglages* in the add picker.
   They are per-studio, not per-project, so a look you like is one click away on
@@ -50,7 +59,7 @@ Three columns:
 ## Output format
 
 The toolbar above the preview sets the project's output format — used by the
-clip preview, the sequence preview and every render.
+preview and by every render of the project's clips.
 
 | Control | Options |
 |---|---|
@@ -70,28 +79,6 @@ visible (`view`), so text shrinks and slides to stay on screen.
 Screen-anchored effects — lower third, vignette, grain, bands, fade — are drawn
 on the canvas instead, so they frame the output rather than the source.
 
-## Sequences
-
-**Séquence** mode chains shots into one video. `＋ Séq.` on a clip in the list
-appends it as a shot; the same clip can be used as many times as you like.
-
-- Drag a shot's **edges** to trim its in and out points in the clip.
-- Click a shot for its **inspector**: exact in/out, the transition into it
-  (*Coupe franche*, *Fondu au noir*, *Flash blanc*), ◀ ▶ to reorder, *Éditer
-  le clip* to jump to that clip's effects, × to remove it.
-- `Rendre la séquence` renders the whole chain in the project's format.
-
-Effects belong to the clip and are timed in clip time. A shot shows a window
-of its clip, so each effect is re-expressed in shot time; one that falls
-entirely outside the cut is simply absent from that shot. Text animations are
-fitted to their window: if a shot is too short for the whole entrance and
-exit, both are compressed rather than letting the last letters linger into the
-next shot.
-
-The preview mimics the HyperFrames runtime: every video and audio element is
-windowed by its `data-start` / `data-duration` / `data-media-start`, off one
-clock that follows the current shot's footage.
-
 ## The effect library
 
 The second tab is a page of its own, for making looks rather than using them.
@@ -100,7 +87,9 @@ The second tab is a page of its own, for making looks rather than using them.
   there; `+ Collection` adds your own, `✎` renames, `×` deletes (the presets
   inside survive and fall back to ungrouped).
 - **Préréglages** — pick a base effect and `+ Nouveau préréglage` creates one
-  from scratch, no clip needed. It lands in the collection you are looking at.
+  from scratch, no clip needed, in the collection you are looking at. It is
+  created at once under a free name, with the cursor in its name field so you
+  can rename it straight away.
 - **The editor** — the same schema-driven controls as the timeline's cards,
   plus rename, move to another collection, **Dupliquer** and **Supprimer**.
 
@@ -235,12 +224,12 @@ server/ui/index.html   the interface
 lib/media.mjs          probe / face detection / person matte
 lib/timing.mjs         where an effect instance sits on the clip
 lib/format.mjs         output canvas, and how a clip is placed on it
-lib/store.mjs          folders, projects, presets — and safe persistence
+lib/store.mjs          folders, projects (+ output format), presets — and safe persistence
 lib/guard.mjs          who may talk to the studio (Host / Origin)
 test/                  node --test, no dependencies
 lib/effects.mjs        graphics catalogue — add new effects here
 lib/effects-image.mjs  image treatments (filters, grain, vignette…)
-lib/compose.mjs        shots + effects + format  →  HyperFrames composition
+lib/compose.mjs        clip + effects + format  →  HyperFrames composition
 tools/facedet.swift    face box per frame          (Vision)
 tools/personmatte.swift person cut out per frame   (Vision)
 studio.json            your library and its effect stacks
@@ -321,6 +310,16 @@ its relative API paths cannot resolve, and the browser reports
 `Failed to parse URL from /api/videos`, which explains nothing. The page now
 detects a `file://` origin and says so, with a link to
 [http://localhost:3002](http://localhost:3002). Always work from that URL.
+
+## Dialogs
+
+Every question the studio asks — a name, a confirmation — goes through its own
+in-page dialog, never `prompt()` or `confirm()`. Browsers embedded in apps
+often refuse the native ones: the Claude desktop pane throws on `prompt()` and
+answers every `confirm()` with `false`, which made creating presets impossible
+and silently cancelled every deletion. Enter validates, Escape or a click
+outside cancels. Any action that fails without its own handling shows up in a
+toast at the bottom of the screen instead of failing silently.
 
 ## `npm run check` reports errors on purpose
 

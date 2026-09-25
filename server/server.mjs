@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import { catalogue, defaultParams, byType, isTimed } from "../lib/effects.mjs";
 import { Store, newId } from "../lib/store.mjs";
-import { compose, composeSequence, needsMatte, clipsNeedingMatte, TRANSITIONS } from "../lib/compose.mjs";
+import { compose, needsMatte } from "../lib/compose.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
@@ -123,15 +123,7 @@ const filesOf = (video) => {
 };
 
 // A clip is previewed and rendered in its project's output format.
-const formatOf = (videoId) => store.locate(videoId).project?.sequence?.format || {};
-
-// The project's shots, each resolved to its clip. Shots whose clip is gone are
-// skipped rather than breaking the whole sequence.
-function shotsOf(project) {
-  return project.sequence.shots
-    .map((shot) => ({ ...shot, video: project.videos.find((v) => v.id === shot.videoId) }))
-    .filter((shot) => shot.video);
-}
+const formatOf = (videoId) => store.locate(videoId).project?.format || {};
 
 async function writeAtomic(file, contents) {
   const tmp = `${file}.tmp`;
@@ -324,7 +316,6 @@ async function removeVideo(res, id) {
   const { project, video } = store.locate(id);
   if (!video) return send(res, 404, { error: "unknown video" });
   project.videos = project.videos.filter((v) => v.id !== id);
-  store.forgetClip(project, id);
   await dropMedia(video);
   if (store.state.activeVideo === id) store.state.activeVideo = null;
   await saveState();
@@ -338,7 +329,7 @@ async function handleApi(req, res, url) {
   if (section === "state" && req.method === "GET") {
     return send(res, 200, {
       ...store.snapshot(catalogue()),
-      options: { aspects: ASPECTS, sizes: SIZES, fits: FITS, focuses: FOCUSES, fills: FILLS, transitions: TRANSITIONS },
+      options: { aspects: ASPECTS, sizes: SIZES, fits: FITS, focuses: FOCUSES, fills: FILLS },
     });
   }
 
@@ -393,73 +384,9 @@ async function handleApi(req, res, url) {
     // ------------------------------------------------ output format
     if (sub === "format" && req.method === "PATCH") {
       const body = await readJson(req);
-      project.sequence.format = normaliseFormat({ ...project.sequence.format, ...body });
+      project.format = normaliseFormat({ ...project.format, ...body });
       await saveState();
-      return send(res, 200, { format: project.sequence.format });
-    }
-
-    // ------------------------------------------------------- shots
-    if (sub === "shots") {
-      if (req.method === "POST" && !subId) {
-        const { videoId, in: cutIn, out } = await readJson(req);
-        const shot = store.addShot(project, videoId, { in: cutIn || 0, out: out ?? null });
-        if (!shot) return send(res, 400, { error: "ce clip n'appartient pas au projet" });
-        await saveState();
-        return send(res, 200, { shot });
-      }
-
-      const shot = project.sequence.shots.find((x) => x.id === subId);
-      if (!shot) return send(res, 404, { error: "unknown shot" });
-      const clip = project.videos.find((v) => v.id === shot.videoId);
-
-      if (req.method === "PATCH") {
-        const body = await readJson(req);
-        const length = clip ? clip.duration : Infinity;
-        if (body.in !== undefined) {
-          shot.in = Math.max(0, Math.min(Number(body.in) || 0, length - 0.1));
-        }
-        if (body.out !== undefined) {
-          shot.out = body.out === null
-            ? null
-            : Math.max(shot.in + 0.1, Math.min(Number(body.out), length));
-        }
-        // An in-point dragged past the out-point pushes it along.
-        if (shot.out !== null && shot.out < shot.in + 0.1) shot.out = shot.in + 0.1;
-        if (body.transition !== undefined) {
-          shot.transition = TRANSITIONS.some((t) => t.value === body.transition)
-            ? body.transition
-            : "cut";
-        }
-        if (body.index !== undefined) store.moveShot(project, shot.id, Number(body.index));
-        await saveState();
-        return send(res, 200, { shot });
-      }
-      if (req.method === "DELETE") {
-        store.removeShot(project, shot.id);
-        await saveState();
-        return send(res, 200, { ok: true });
-      }
-    }
-
-    // Everything the sequence preview needs on disk: its clips' cut-outs.
-    if (sub === "prepare" && req.method === "POST") {
-      const job = startJob("prepare-sequence", async (j) => {
-        for (const video of clipsNeedingMatte(shotsOf(project))) await ensureMatte(video, j);
-        return { ready: true };
-      });
-      return send(res, 200, { job });
-    }
-
-    if (sub === "render" && req.method === "POST") {
-      const shots = shotsOf(project);
-      if (!shots.length) return send(res, 400, { error: "la séquence est vide" });
-      return send(res, 200, {
-        job: queueRender({
-          name: project.name,
-          html: composeSequence({ shots, format: project.sequence.format, files: filesOf }),
-          mattes: clipsNeedingMatte(shots),
-        }),
-      });
+      return send(res, 200, { format: project.format });
     }
 
     if (req.method === "PATCH" && !sub) {
@@ -576,7 +503,41 @@ async function handleApi(req, res, url) {
 
     // effects -------------------------------------------------------------
     if (sub === "effects") {
-      if (req.method === "POST") {
+      // Paste effects copied from another clip. They arrive as plain data (the
+      // source clip may be gone, or in another project), so each is rebuilt
+      // from its type's schema: unknown types are dropped, unknown params
+      // ignored, and every copy gets an id of its own.
+      if (req.method === "POST" && subId === "paste") {
+        const { effects = [], replace = false } = await readJson(req);
+        const copies = [];
+        for (const src of Array.isArray(effects) ? effects : []) {
+          const def = byType(src?.type);
+          if (!def) continue;
+          const params = defaultParams(src.type);
+          for (const f of def.schema) {
+            if (src.params && src.params[f.key] !== undefined) params[f.key] = src.params[f.key];
+          }
+          const start = Math.max(0, Math.min(Number(src.start) || 0, video.duration - 0.1));
+          copies.push({
+            id: newId("fx_"),
+            type: src.type,
+            name: src.name ? String(src.name).slice(0, 80) : null,
+            enabled: src.enabled !== false,
+            start,
+            // A window longer than this clip runs to its end instead.
+            duration: src.duration == null
+              ? null
+              : Math.max(0.1, Math.min(Number(src.duration), video.duration - start)),
+            params,
+          });
+        }
+        if (!copies.length) return send(res, 400, { error: "rien à coller" });
+        video.effects = replace ? copies : [...video.effects, ...copies];
+        await saveState();
+        return send(res, 200, { video, pasted: copies.length });
+      }
+
+      if (req.method === "POST" && !subId) {
         const body = await readJson(req);
         const preset = body.presetId ? store.preset(body.presetId) : null;
         if (body.presetId && !preset) return send(res, 400, { error: "unknown preset" });
@@ -657,7 +618,7 @@ async function handleApi(req, res, url) {
 // relative media/ paths resolve, and a small player stands in for the
 // HyperFrames runtime: it windows every video and audio element by its
 // data-start / data-duration / data-media-start, and drives the GSAP timeline
-// off one clock — so a sequence of several shots previews like it renders.
+// off the footage's clock, keeping the cut-out and the audio in step.
 function playable(html) {
   html = html.replace("<head>", `<head>\n    <base href="/">`);
   html = html.replace("</body>", `
@@ -678,9 +639,9 @@ function playable(html) {
               end: start + (parseFloat(el.getAttribute("data-duration")) || 0),
               from: parseFloat(el.getAttribute("data-media-start")) || 0,
               video: el.tagName === "VIDEO",
-              // Each shot's footage is the clock while it plays; the cut-out
-              // and the audio follow it.
-              master: el.id.indexOf("bg_") === 0,
+              // The footage is the clock while it plays; the cut-out and the
+              // audio follow it.
+              master: el.id === "bg",
             };
           });
 
@@ -719,8 +680,7 @@ function playable(html) {
               // Follow the footage while it plays; never step backwards.
               t = Math.max(t, m.start + (m.el.currentTime - m.from));
             } else {
-              // Across a cut the next shot's video has not started yet: the
-              // wall clock carries us over.
+              // Until the footage is actually playing, the wall clock does.
               t += dt;
             }
             if (t >= total) {
@@ -775,23 +735,6 @@ async function servePreview(res, id) {
   send(res, 200, playable(compose(video, filesOf(video), formatOf(video.id))), "text/html");
 }
 
-// The whole sequence of a project, as it will render.
-async function serveSequencePreview(res, projectId) {
-  const project = store.project(projectId);
-  if (!project) return send(res, 404, { error: "unknown project" }, "text/plain");
-  const shots = shotsOf(project);
-  if (!shots.length) {
-    return send(res, 200, `<!doctype html><meta charset="utf-8">
-      <body style="margin:0;display:flex;align-items:center;justify-content:center;
-                   height:100vh;background:#0d1017;color:#8b97a8;
-                   font:13px -apple-system,system-ui,sans-serif;text-align:center;padding:24px">
-        La séquence est vide. Ajoute des plans depuis la liste des vidéos (＋ Séquence).
-      </body>`, "text/html");
-  }
-  const html = composeSequence({ shots, format: project.sequence.format, files: filesOf });
-  send(res, 200, playable(html), "text/html");
-}
-
 // The library's preview: the clip with this preset as its only effect, so you
 // can tune a look without it fighting whatever else is on the timeline.
 async function servePresetPreview(res, presetId, videoId) {
@@ -843,7 +786,6 @@ async function handler(req, res) {
   try {
     if (p.startsWith("/api/")) return await handleApi(req, res, url);
     if (p.startsWith("/preview/")) return await servePreview(res, p.split("/")[2]);
-    if (p.startsWith("/preview-sequence/")) return await serveSequencePreview(res, p.split("/")[2]);
     if (p.startsWith("/preview-preset/")) {
       return await servePresetPreview(res, p.split("/")[2], url.searchParams.get("video"));
     }

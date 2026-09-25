@@ -18,37 +18,37 @@ const files = { bgFile: "bg.mov", fgFile: "fg.webm" };
 
 test("a clip with no effects is the footage and its audio, no cut-out", () => {
   const html = compose(video(), files);
-  assert.match(html, /id="bg_s0"/);
-  assert.match(html, /id="audio_s0"/);
-  assert.doesNotMatch(html, /id="fg_s0"/);
+  assert.match(html, /id="bg"/);
+  assert.match(html, /id="audio"/);
+  assert.doesNotMatch(html, /id="fg"/);
 });
 
 test("the cut-out layer appears only when an effect sits behind the person", () => {
   assert.equal(needsMatte(video([fx("title")])), false);
   assert.equal(needsMatte(video([fx("behind-text")])), true);
-  assert.match(compose(video([fx("behind-text")]), files), /id="fg_s0"/);
+  assert.match(compose(video([fx("behind-text")]), files), /id="fg"/);
 });
 
 test("a disabled effect is left out entirely", () => {
   const html = compose(video([fx("title", { enabled: false })]), files);
-  assert.doesNotMatch(html, /s0_fx_title/);
+  assert.doesNotMatch(html, /fx_title/);
 });
 
 test("background blur hits the background only, so the person stays sharp", () => {
   const html = compose(video([fx("behind-text"), fx("bg-blur")]), files);
-  assert.match(html, /#bg_s0 \{[^}]*blur\(14px\)/);
-  assert.doesNotMatch(html, /#fg_s0 \{[^}]*blur/);
+  assert.match(html, /#bg \{[^}]*blur\(14px\)/);
+  assert.doesNotMatch(html, /#fg \{[^}]*blur/);
 });
 
 test("a grade reaches both layers, or the cut-out would stop matching", () => {
   const html = compose(video([fx("behind-text"), fx("grade")]), files);
-  assert.match(html, /#bg_s0 \{[^}]*contrast\(/);
-  assert.match(html, /#fg_s0 \{[^}]*contrast\(/);
+  assert.match(html, /#bg \{[^}]*contrast\(/);
+  assert.match(html, /#fg \{[^}]*contrast\(/);
 });
 
 test("stacked treatments compose instead of overwriting each other", () => {
   const html = compose(video([fx("behind-text"), fx("bg-blur"), fx("grade")]), files);
-  const bgRule = html.match(/#bg_s0 \{[^}]*filter: ([^;]*);/)[1];
+  const bgRule = html.match(/#bg \{[^}]*filter: ([^;]*);/)[1];
   assert.match(bgRule, /blur\(/);
   assert.match(bgRule, /contrast\(/);
 });
@@ -110,4 +110,35 @@ test("a window too short for both animations compresses them instead of overrunn
   assert.ok(at + exit + each * 9 <= 1.4 + 0.002, "exit over by the end of the window");
   const entrance = /duration: ([\d.]+), ease: "power3\.out", stagger: ([\d.]+)/.exec(built.timeline);
   assert.ok(Number(entrance[1]) + Number(entrance[2]) * 9 <= at + 0.002, "entrance done before the exit starts");
+});
+
+// ------------------------------------------------------------ output format
+
+test("the output format sets the canvas", () => {
+  const html = compose(video(), files, { aspect: "9:16", size: 1080 });
+  assert.match(html, /data-width="1080"/);
+  assert.match(html, /data-height="1920"/);
+});
+
+test("screen-anchored effects sit on the canvas, not inside the recropped stage", () => {
+  const html = compose(video([fx("vignette"), fx("behind-text")]), files, { aspect: "9:16" });
+  const stage = html.slice(html.indexOf('<div id="stage">'), html.indexOf("</div>\n", html.indexOf('<div id="stage">')));
+  assert.ok(stage.includes("fx_behindtext"), "the text behind you is on the stage");
+  assert.ok(!stage.includes("fx_vignette"), "the vignette frames the output");
+});
+
+test("adapting a clip into a taller frame fills the bands", () => {
+  assert.match(compose(video(), files, { aspect: "9:16", fit: "contain", fill: "blur" }), /id="fill"/);
+  const black = compose(video(), files, { aspect: "9:16", fit: "contain", fill: "#000000" });
+  assert.doesNotMatch(black, /id="fill"/);
+  assert.match(black, /background: #000000/);
+});
+
+test("a recrop narrows the width text may use", () => {
+  const wide = byType("title").build(fx("title"), video());
+  const narrow = byType("title").build(fx("title"),
+    { ...video(), view: { x: 437, y: 0, w: 405, h: 720 } });
+  const max = (b) => Number(/if \(width > (\d+)\)/.exec(b.init)[1]);
+  assert.ok(max(narrow) < max(wide));
+  assert.ok(max(narrow) <= 405);
 });

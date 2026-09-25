@@ -208,51 +208,46 @@
       }
       .tl-empty { font-size: 12px; color: var(--muted); padding: 4px 2px; }
 
-      /* toolbar: mode + output format ------------------------------- */
+      /* toolbar: output format -------------------------------------- */
       .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 0 0 auto; }
       .toolbar .grow { flex: 1; }
       .toolbar label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
       .toolbar select { width: auto; font-size: 12px; padding: 4px 6px; }
       /* display:flex would otherwise win over the hidden attribute */
-      .toolbar label[hidden], .shot-insp[hidden] { display: none; }
-      .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-      .seg button { border: 0; border-radius: 0; padding: 6px 12px; font-size: 12.5px; background: var(--panel); color: var(--muted); }
-      .seg button.on { background: var(--accent); color: #fff; }
+      .toolbar label[hidden] { display: none; }
+      /* in-page dialog ---------------------------------------------------- */
+      .dlg-back {
+        position: fixed; inset: 0; z-index: 1000; background: rgba(5, 8, 12, .62);
+        display: flex; align-items: center; justify-content: center; padding: 16px;
+      }
+      .dlg-back[hidden] { display: none; }
+      .dlg {
+        width: min(420px, 100%); display: grid; gap: 12px; padding: 18px;
+        background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+      }
+      .dlg-title { font-size: 14px; font-weight: 600; }
+      .dlg-msg { font-size: 13px; color: var(--muted); line-height: 1.5; }
+      .dlg-msg[hidden], .dlg-field[hidden] { display: none; }
+      .dlg-field { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
+      .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }
+      button.danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 500; }
+      button.danger:hover:not(:disabled) { filter: brightness(1.08); background: var(--danger); }
 
-      /* sequence strip ------------------------------------------------ */
-      .shot {
-        position: absolute; top: 2px; bottom: 2px;
-        background: linear-gradient(180deg, #5a4bd6, #4638b0);
-        border-radius: 4px; overflow: hidden; cursor: pointer;
-        display: flex; align-items: center; padding: 0 10px;
-        font-size: 10.5px; color: #eeeaff; white-space: nowrap;
-        box-shadow: inset -1px 0 0 rgba(0,0,0,.35);
+      .clipbar { display: flex; gap: 6px; padding: 0 12px 6px; }
+      .clipbar button { flex: 1; font-size: 12px; padding: 5px 8px; }
+      .clipbar button[hidden] { display: none; }
+      .fx-head .copy { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 5px; border-radius: 5px; font-size: 13px; }
+      .fx-head .copy:hover { color: var(--text); background: var(--panel-2); }
+
+      .toast {
+        position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 1100;
+        max-width: min(560px, calc(100vw - 32px));
+        background: #2a1416; border: 1px solid #5c2a2d; color: #ffd9d6;
+        padding: 10px 14px; border-radius: 10px; font-size: 13px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, .4);
       }
-      .shot.on { outline: 2px solid #b8adff; outline-offset: -2px; }
-      .shot .tr {
-        position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
-        background: repeating-linear-gradient(180deg, #fff 0 3px, transparent 3px 6px); opacity: .7;
-      }
-      .shot .tr.black { background: repeating-linear-gradient(180deg, #000 0 3px, #888 3px 6px); }
-      .seq-track { height: 30px; }
-      .seq-track .tl-track { height: 30px; }
-      .shot-insp {
-        display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-        background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-        padding: 8px 12px; font-size: 12px; flex: 0 0 auto;
-      }
-      .shot-insp .title { font-weight: 600; margin-right: 4px; }
-      .shot-insp label { display: flex; align-items: center; gap: 5px; color: var(--muted); }
-      .shot-insp input[type="number"] { width: 72px; padding: 4px 6px; font-size: 12px; }
-      .shot-insp select { width: auto; padding: 4px 6px; font-size: 12px; }
-      .shot-insp button { padding: 4px 9px; font-size: 12px; }
-      .shot-insp .grow { flex: 1; }
-      .vid .add-seq {
-        opacity: 0; border: 0; background: transparent; color: var(--muted);
-        cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 5px; white-space: nowrap;
-      }
-      .vid:hover .add-seq { opacity: 1; }
-      .vid .add-seq:hover { color: var(--text); background: rgba(90,75,214,.35); }
+      .toast[hidden] { display: none; }
 
       .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
       .bar .grow { flex: 1; }
@@ -340,10 +335,7 @@
       <section class="col">
         <div class="stage">
           <div class="toolbar">
-            <div class="seg" id="mode">
-              <button data-mode="clip" class="on" title="Un clip et ses effets">Clip</button>
-              <button data-mode="seq" title="Tous les plans du projet, enchaînés">Séquence</button>
-            </div>
+            <span style="font-size:11.5px;color:var(--muted)">Sortie</span>
             <span class="grow"></span>
             <label>Format <select id="f-aspect"></select></label>
             <label>Taille <select id="f-size"></select></label>
@@ -358,11 +350,6 @@
             <div id="tl-body"></div>
             <div class="tl-head" id="tl-head"></div>
           </div>
-          <div class="tl" id="seq" hidden>
-            <div id="seq-body"></div>
-            <div class="tl-head" id="seq-head"></div>
-          </div>
-          <div class="shot-insp" id="shot-insp" hidden></div>
           <div class="bar">
             <button id="play" disabled>Lecture</button>
             <button id="restart" disabled>⟲</button>
@@ -385,6 +372,11 @@
         </div>
         <div class="hint" id="fx-hint"></div>
         <div class="presets" id="presets"></div>
+        <div class="clipbar">
+          <button id="fx-copy" title="Copier tous les effets de ce clip">Copier les effets</button>
+          <button id="fx-paste" title="Coller les effets copiés sur ce clip" hidden>Coller</button>
+        </div>
+        <div class="hint" id="clip-note" hidden></div>
         <div class="scroll" id="stack"></div>
       </section>
     </main>
@@ -428,8 +420,109 @@
       </section>
     </main>
 
+    <div class="toast" id="toast" role="alert" hidden></div>
+
+    <div class="dlg-back" id="dlg" hidden>
+      <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+        <div class="dlg-title" id="dlg-title"></div>
+        <div class="dlg-msg" id="dlg-msg"></div>
+        <label class="dlg-field" id="dlg-text-field">
+          <span id="dlg-text-label">Nom</span>
+          <input type="text" id="dlg-input" autocomplete="off" />
+        </label>
+        <label class="dlg-field" id="dlg-choice-field">
+          <span id="dlg-choice-label"></span>
+          <select id="dlg-select"></select>
+        </label>
+        <div class="dlg-actions">
+          <button id="dlg-cancel">Annuler</button>
+          <button id="dlg-ok" class="primary">OK</button>
+        </div>
+      </div>
+    </div>
+
     <script>
       const $ = (s) => document.querySelector(s);
+
+      // Every question the studio asks goes through this in-page dialog.
+      // Browsers embedded in apps often refuse the native ones — the Claude
+      // desktop pane throws on prompt() and answers every confirm() with false,
+      // which silently cancelled every deletion.
+      function dialog({ title, message = "", value, textLabel = "Nom", choices = null,
+                        choiceLabel = "", choiceValue = "", okLabel = "OK", danger = false }) {
+        return new Promise((resolve) => {
+          const back = $("#dlg");
+          const input = $("#dlg-input");
+          const select = $("#dlg-select");
+          const ok = $("#dlg-ok");
+
+          $("#dlg-title").textContent = title;
+          $("#dlg-msg").textContent = message;
+          $("#dlg-msg").hidden = !message;
+          $("#dlg-text-field").hidden = value === undefined;
+          $("#dlg-text-label").textContent = textLabel;
+          input.value = value ?? "";
+          $("#dlg-choice-field").hidden = !choices;
+          $("#dlg-choice-label").textContent = choiceLabel;
+          select.innerHTML = "";
+          for (const c of choices || []) {
+            const opt = document.createElement("option");
+            opt.value = c.value;
+            opt.textContent = c.label;
+            if (c.value === choiceValue) opt.selected = true;
+            select.appendChild(opt);
+          }
+          ok.textContent = okLabel;
+          ok.className = danger ? "danger" : "primary";
+          back.hidden = false;
+          setTimeout(() => {
+            if (value !== undefined) { input.focus(); input.select(); } else ok.focus();
+          });
+
+          const finish = (result) => {
+            back.hidden = true;
+            document.removeEventListener("keydown", onKey, true);
+            back.removeEventListener("mousedown", onBackdrop);
+            ok.onclick = null;
+            $("#dlg-cancel").onclick = null;
+            resolve(result);
+          };
+          const accept = () => finish({ text: input.value.trim(), choice: select.value });
+          const onKey = (e) => {
+            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); }
+            if (e.key === "Enter" && e.target.tagName !== "SELECT" && e.target.tagName !== "BUTTON") {
+              e.preventDefault(); e.stopPropagation(); accept();
+            }
+          };
+          const onBackdrop = (e) => { if (e.target === back) finish(null); };
+          ok.onclick = accept;
+          $("#dlg-cancel").onclick = () => finish(null);
+          document.addEventListener("keydown", onKey, true);
+          back.addEventListener("mousedown", onBackdrop);
+        });
+      }
+
+      // Any action that fails without its own handling ends up here, visibly —
+      // the library page has no status line, so failures there used to vanish.
+      let toastTimer = null;
+      function toast(message) {
+        const el = $("#toast");
+        el.textContent = message;
+        el.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.hidden = true; }, 6000);
+      }
+      window.addEventListener("unhandledrejection", (e) => {
+        toast(e.reason && e.reason.message ? e.reason.message : String(e.reason));
+      });
+
+      // A name, or null if cancelled or left empty.
+      const askText = async (title, value, okLabel = "Enregistrer") => {
+        const r = await dialog({ title, value, okLabel });
+        return r && r.text ? r.text : null;
+      };
+      const askConfirm = async (title, message, okLabel = "Supprimer") =>
+        Boolean(await dialog({ title, message, okLabel, danger: true }));
 
       // This page only works when the studio serves it. Opened straight off
       // disk (file://) every relative API path fails to resolve, with an error
@@ -453,9 +546,6 @@
       let state = { videos: [], effects: [] };
       let selected = null;
       let playing = false;
-      // "clip": one clip and its effects. "seq": the project's shots, chained.
-      let mode = "clip";
-      let selectedShot = null;
 
       // ---------------------------------------------------------- render UI
 
@@ -476,16 +566,14 @@
               <div class="name">${escapeHtml(v.name)}</div>
               <div class="dim">${v.width}×${v.height} · ${v.duration.toFixed(1)}s · ${v.effects.length} effet${v.effects.length > 1 ? "s" : ""}${v.face ? "" : " · pas de visage"}</div>
             </div>
-            <button class="add-seq" title="Ajouter ce clip à la séquence">＋ Séq.</button>
             <button class="x" title="Supprimer">×</button>`;
           row.onclick = (e) => {
             if (e.target.closest("button")) return;
-            if (mode !== "clip") setMode("clip");
             select(v.id);
           };
-          row.querySelector(".add-seq").onclick = () => addToSequence(v.id);
           row.querySelector(".x").onclick = async () => {
-            if (!confirm(`Supprimer « ${v.name} » et ses fichiers ?`)) return;
+            if (!(await askConfirm("Supprimer ce clip ?",
+              `« ${v.name} », ses effets et sa découpe seront supprimés.`))) return;
             await api(`/api/videos/${v.id}`, { method: "DELETE" });
             if (selected === v.id) { selected = null; clearFrame(); }
             await refresh();
@@ -495,6 +583,7 @@
       }
 
       function drawStack() {
+        drawClipbar();
         const el = $("#stack");
         const v = videoById(selected);
         el.innerHTML = "";
@@ -515,6 +604,7 @@
             <input type="checkbox" class="on" ${fx.enabled !== false ? "checked" : ""} title="Activer" />
             <input type="text" class="t" value="${escapeHtml(fx.name || "")}"
                    placeholder="${escapeHtml(def.label)}" title="Renommer cet effet" />
+            <button class="copy" title="Copier cet effet">⧉</button>
             <button class="star" title="Enregistrer comme préréglage">★</button>
             <button class="x" title="Retirer">×</button>`;
           head.querySelector(".on").onchange = (e) =>
@@ -526,10 +616,14 @@
           nameInput.onchange = () => patch(v.id, fx.id, { name: nameInput.value });
           nameInput.onkeydown = (e) => { if (e.key === "Enter") nameInput.blur(); };
 
+          head.querySelector(".copy").onclick = () => {
+            setClipboard({ from: `${v.name} · ${fx.name || def.label}`, effects: [effectData(fx)] });
+            setStatus(`« ${fx.name || def.label} » copié. Sélectionne un autre clip et colle-le.`);
+          };
+
           head.querySelector(".star").onclick = async () => {
-            const name = prompt(
-              "Nom du préréglage", fx.name || def.label);
-            if (name === null) return;
+            const name = await askText("Enregistrer comme préréglage", fx.name || def.label);
+            if (!name) return;
             await api("/api/presets", {
               method: "POST",
               headers: { "content-type": "application/json" },
@@ -722,18 +816,14 @@
       let previewToken = 0;
       async function preview(opts = {}) {
         const v = videoById(selected);
-        const seq = mode === "seq";
-        if (!seq && !v) return;
-        if (seq && !state.activeProject) return;
+        if (!v) return;
         const token = ++previewToken;
         const at = opts.at !== undefined ? opts.at : currentPreviewTime();
 
         setBusy(true);
         $("#prog").hidden = false;
         try {
-          const { job } = await api(seq
-            ? `/api/projects/${state.activeProject}/prepare`
-            : `/api/videos/${v.id}/prepare`, { method: "POST" });
+          const { job } = await api(`/api/videos/${v.id}/prepare`, { method: "POST" });
           await waitJob(job.id);
         } catch (error) {
           setBusy(false);
@@ -748,16 +838,13 @@
         frame.innerHTML = "";
         frame.classList.add("busy");
         const iframe = document.createElement("iframe");
-        iframe.src = seq
-          ? `/preview-sequence/${state.activeProject}?v=${Date.now()}#t=${at.toFixed(3)}`
-          : `/preview/${v.id}?v=${Date.now()}#t=${at.toFixed(3)}`;
+        iframe.src = `/preview/${v.id}?v=${Date.now()}#t=${at.toFixed(3)}`;
         iframe.onload = () => fitFrame(iframe, v, frame);
         frame.appendChild(iframe);
         fitFrame(iframe, v, frame);
         playing = false;
         $("#play").textContent = "Lecture";
         for (const id of ["play", "restart", "refresh", "render"]) $("#" + id).disabled = false;
-        if (seq && !state.sequence.shots.length) $("#render").disabled = true;
         // The iframe tells us once it has actually landed on `at`.
         setTimeout(() => setBusy(false), 2500);
       }
@@ -981,8 +1068,7 @@
             const w = $("#frame iframe").contentWindow;
             if (w.__studioTime) { t = w.__studioTime(); duration = w.__studioDuration; }
           } catch { /* iframe mid-reload */ }
-          place("#tl-head", "#tl", "#tl .tl-ruler .tl-track", duration, mode === "clip" ? t : null);
-          place("#seq-head", "#seq", "#seq .tl-ruler .tl-track", duration, mode === "seq" ? t : null);
+          place("#tl-head", "#tl", "#tl .tl-ruler .tl-track", duration, t);
           requestAnimationFrame(frame);
         }
         requestAnimationFrame(frame);
@@ -1012,8 +1098,8 @@
             if (v) await select(v.id); else clearFrame();
           };
           row.querySelector(".ren").onclick = async () => {
-            const name = prompt("Nom du projet", project.name);
-            if (name === null) return;
+            const name = await askText("Renommer le projet", project.name);
+            if (!name) return;
             await api(`/api/projects/${project.id}`, {
               method: "PATCH",
               headers: { "content-type": "application/json" },
@@ -1022,7 +1108,8 @@
             await refresh();
           };
           row.querySelector(".x").onclick = async () => {
-            if (!confirm(`Supprimer « ${project.name} » et ses ${project.videoCount} vidéo(s) ?`)) return;
+            if (!(await askConfirm("Supprimer ce projet ?",
+              `« ${project.name} » et ses ${project.videoCount} vidéo(s) seront supprimés.`))) return;
             await api(`/api/projects/${project.id}`, { method: "DELETE" });
             selected = null;
             await refresh();
@@ -1043,8 +1130,8 @@
             <button class="ren" title="Renommer">✎</button>
             <button class="x" title="Supprimer le dossier">×</button>`;
           head.querySelector(".ren").onclick = async () => {
-            const name = prompt("Nom du dossier", folder.name);
-            if (name === null) return;
+            const name = await askText("Renommer le dossier", folder.name);
+            if (!name) return;
             await api(`/api/folders/${folder.id}`, {
               method: "PATCH",
               headers: { "content-type": "application/json" },
@@ -1053,7 +1140,8 @@
             await refresh();
           };
           head.querySelector(".x").onclick = async () => {
-            if (!confirm(`Supprimer le dossier « ${folder.name} » ? Les projets qu'il contient sont conservés.`)) return;
+            if (!(await askConfirm(`Supprimer le dossier « ${folder.name} » ?`,
+              "Les projets qu'il contient sont conservés et remontent à la racine."))) return;
             await api(`/api/folders/${folder.id}`, { method: "DELETE" });
             await refresh();
           };
@@ -1065,17 +1153,19 @@
       }
 
       $("#new-project").onclick = async () => {
-        const name = prompt("Nom du projet", "Nouveau projet");
-        if (name === null) return;
         const folders = state.folders;
-        let folderId = null;
-        if (folders.length) {
-          const choice = prompt(
-            "Dans quel dossier ? Laisse vide pour la racine.\n" +
-            folders.map((f, i) => `${i + 1}. ${f.name}`).join("\n"), "");
-          const idx = Number(choice) - 1;
-          if (folders[idx]) folderId = folders[idx].id;
-        }
+        const answer = await dialog({
+          title: "Nouveau projet",
+          value: "Nouveau projet",
+          okLabel: "Créer",
+          choices: folders.length
+            ? [{ value: "", label: "À la racine" }, ...folders.map((f) => ({ value: f.id, label: f.name }))]
+            : null,
+          choiceLabel: "Dossier",
+        });
+        if (!answer || !answer.text) return;
+        const name = answer.text;
+        const folderId = answer.choice || null;
         await api("/api/projects", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1087,8 +1177,8 @@
       };
 
       $("#new-folder").onclick = async () => {
-        const name = prompt("Nom du dossier", "Nouveau dossier");
-        if (name === null) return;
+        const name = await askText("Nouveau dossier", "Nouveau dossier", "Créer");
+        if (!name) return;
         await api("/api/folders", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1196,8 +1286,8 @@
           };
           if (removable) {
             div.querySelector(".ren").onclick = async () => {
-              const name = prompt("Nom de la collection", label);
-              if (name === null) return;
+              const name = await askText("Renommer la collection", label);
+              if (!name) return;
               await api(`/api/collections/${id}`, {
                 method: "PATCH",
                 headers: { "content-type": "application/json" },
@@ -1206,7 +1296,8 @@
               await refresh();
             };
             div.querySelector(".x").onclick = async () => {
-              if (!confirm(`Supprimer « ${label} » ? Les préréglages qu'elle contient sont conservés.`)) return;
+              if (!(await askConfirm(`Supprimer la collection « ${label} » ?`,
+                "Les préréglages qu'elle contient sont conservés."))) return;
               await api(`/api/collections/${id}`, { method: "DELETE" });
               if (libCollection === id) libCollection = "all";
               await refresh();
@@ -1247,7 +1338,7 @@
             previewPreset();
           };
           item.querySelector(".x").onclick = async () => {
-            if (!confirm(`Supprimer « ${preset.name} » ?`)) return;
+            if (!(await askConfirm("Supprimer ce préréglage ?", `« ${preset.name} »`))) return;
             await api(`/api/presets/${preset.id}`, { method: "DELETE" });
             if (libPreset === preset.id) libPreset = null;
             await refresh();
@@ -1373,9 +1464,13 @@
 
       $("#lib-create").onclick = async () => {
         const type = $("#lib-base").value;
+        // Created at once under a free name; the name field takes focus so it
+        // can be renamed in place — no question asked.
         const def = state.effects.find((e) => e.type === type);
-        const name = prompt("Nom du préréglage", def ? def.label : "Préréglage");
-        if (name === null) return;
+        const base = def ? def.label : "Préréglage";
+        const taken = new Set(state.presets.map((x) => x.name));
+        let name = base;
+        for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
         const { preset } = await api("/api/presets", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1388,6 +1483,9 @@
         await refresh();
         fillEffectPicker();
         previewPreset();
+        const nameField = $("#lib-name");
+        nameField.focus();
+        nameField.select();
       };
 
       $("#lib-name").onchange = async () => {
@@ -1421,7 +1519,7 @@
 
       $("#lib-del").onclick = async () => {
         const preset = state.presets.find((p) => p.id === libPreset);
-        if (!preset || !confirm(`Supprimer « ${preset.name} » ?`)) return;
+        if (!preset || !(await askConfirm("Supprimer ce préréglage ?", `« ${preset.name} »`))) return;
         await api(`/api/presets/${preset.id}`, { method: "DELETE" });
         libPreset = null;
         await refresh();
@@ -1439,8 +1537,8 @@
       };
 
       $("#new-collection").onclick = async () => {
-        const name = prompt("Nom de la collection", "Nouvelle collection");
-        if (name === null) return;
+        const name = await askText("Nouvelle collection", "Nouvelle collection", "Créer");
+        if (!name) return;
         const { collection } = await api("/api/collections", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1471,13 +1569,13 @@
       $("#tab-lib").onclick = () => showView("lib");
 
 
-      // ============================================ format & sequence
+      // ================================================== output format
 
       // ----------------------------------------------------- output format
 
       function drawFormat() {
-        if (!state.options || !state.sequence) return;
-        const f = state.sequence.format;
+        if (!state.options || !state.format) return;
+        const f = state.format;
         const fill = (sel, list, value) => {
           const el = $(sel);
           el.innerHTML = "";
@@ -1514,223 +1612,84 @@
         };
       }
 
-      // ------------------------------------------------------------ mode
 
-      function setMode(next) {
-        mode = next;
-        for (const b of document.querySelectorAll("#mode button")) {
-          b.classList.toggle("on", b.dataset.mode === mode);
-        }
-        $("#tl").hidden = mode !== "clip" || !videoById(selected);
-        $("#seq").hidden = mode !== "seq";
-        $("#shot-insp").hidden = mode !== "seq" || !selectedShot;
-        $("#render").textContent = mode === "seq" ? "Rendre la séquence" : "Rendre le MP4";
-        drawSequence();
+      // ============================================ copy effects between clips
+
+      // The clipboard holds the effects as data, not a reference to their clip:
+      // a copy survives its source clip being deleted, and pastes across
+      // projects. Kept in sessionStorage so a reload does not lose it.
+      let clipboard = null;
+      try {
+        clipboard = JSON.parse(sessionStorage.getItem("studio.clipboard") || "null");
+      } catch {
+        clipboard = null;
       }
 
-      for (const b of document.querySelectorAll("#mode button")) {
-        b.onclick = () => { setMode(b.dataset.mode); preview({ at: 0 }); };
+      function setClipboard(value) {
+        clipboard = value;
+        try { sessionStorage.setItem("studio.clipboard", JSON.stringify(value)); } catch { /* private mode */ }
+        drawClipbar();
       }
 
-      // ------------------------------------------------------------ shots
+      const effectData = (fx) => ({
+        type: fx.type,
+        name: fx.name || null,
+        enabled: fx.enabled !== false,
+        start: fx.start ?? 0,
+        duration: fx.duration ?? null,
+        params: { ...fx.params },
+      });
 
-      const clipOf = (shot) => state.videos.find((v) => v.id === shot.videoId);
-      const shotOut = (shot) => shot.out ?? (clipOf(shot)?.duration || 0);
-      const shotLength = (shot) => Math.max(0.1, shotOut(shot) - (shot.in || 0));
-
-      // Where each shot starts in the sequence.
-      function laidShots() {
-        let clock = 0;
-        return state.sequence.shots.filter(clipOf).map((shot) => {
-          const entry = { shot, start: clock, length: shotLength(shot) };
-          clock += entry.length;
-          return entry;
-        });
+      function drawClipbar() {
+        const v = videoById(selected);
+        $("#fx-copy").disabled = !v || !v.effects.length;
+        const paste = $("#fx-paste");
+        const note = $("#clip-note");
+        paste.hidden = !clipboard;
+        paste.disabled = !v;
+        note.hidden = !clipboard;
+        if (clipboard) {
+          const n = clipboard.effects.length;
+          paste.textContent = `Coller ${n} effet${n > 1 ? "s" : ""}`;
+          note.textContent = `Presse-papiers : ${clipboard.from}`;
+        }
       }
 
-      function drawSequence() {
-        const body = $("#seq-body");
-        if (!body) return;
-        body.innerHTML = "";
-        if (mode !== "seq" || !state.sequence) return;
+      $("#fx-copy").onclick = () => {
+        const v = videoById(selected);
+        if (!v || !v.effects.length) return;
+        setClipboard({ from: v.name, effects: v.effects.map(effectData) });
+        setStatus(`${v.effects.length} effet(s) copié(s). Sélectionne un autre clip et colle-les.`);
+      };
 
-        const laid = laidShots();
-        const total = laid.reduce((t, x) => t + x.length, 0);
-
-        // ruler
-        const ruler = document.createElement("div");
-        ruler.className = "tl-row tl-ruler";
-        ruler.innerHTML = `<div class="tl-name">${total.toFixed(2)} s · ${laid.length} plan${laid.length > 1 ? "s" : ""}</div>`;
-        const rulerTrack = document.createElement("div");
-        rulerTrack.className = "tl-track";
-        if (total > 0) {
-          const step = total > 30 ? 5 : total > 12 ? 2 : total > 5 ? 1 : 0.5;
-          for (let t = 0; t < total - 0.01; t += step) {
-            const tick = document.createElement("div");
-            tick.className = "tl-tick";
-            tick.style.left = (t / total) * 100 + "%";
-            tick.textContent = Math.round(t * 10) / 10 + "s";
-            rulerTrack.appendChild(tick);
-          }
-          rulerTrack.onpointerdown = (e) => {
-            const r = rulerTrack.getBoundingClientRect();
-            post({ type: "seek", t: ((e.clientX - r.left) / r.width) * total });
-          };
-        }
-        ruler.appendChild(rulerTrack);
-        body.appendChild(ruler);
-
-        const row = document.createElement("div");
-        row.className = "tl-row seq-track";
-        row.innerHTML = '<div class="tl-name">Plans</div>';
-        const track = document.createElement("div");
-        track.className = "tl-track";
-
-        if (!laid.length) {
-          track.innerHTML = '<div class="tl-empty" style="padding:6px 10px">Vide — ajoute des plans avec « ＋ Séq. » dans la liste des vidéos.</div>';
-        }
-
-        for (const { shot, start, length } of laid) {
-          const clip = clipOf(shot);
-          const block = document.createElement("div");
-          block.className = "shot" + (shot.id === selectedShot ? " on" : "");
-          block.style.left = (start / total) * 100 + "%";
-          block.style.width = (length / total) * 100 + "%";
-          block.title = `${clip.name} · ${(+shot.in).toFixed(2)}s → ${shotOut(shot).toFixed(2)}s`;
-          block.innerHTML =
-            (shot.transition && shot.transition !== "cut" ? `<span class="tr ${shot.transition}"></span>` : "") +
-            `<span class="lbl">${escapeHtml(clip.name.replace(/\.[^.]+$/, ""))} · ${length.toFixed(1)}s</span>` +
-            '<span class="tl-h l"></span><span class="tl-h r"></span>';
-
-          block.onclick = (e) => {
-            if (e.target.classList.contains("tl-h")) return;
-            selectedShot = shot.id;
-            // Its clip's effects fill the right-hand column, ready to edit.
-            if (selected !== shot.videoId) { selected = shot.videoId; drawLibrary(); drawStack(); }
-            drawSequence();
-            drawShotInspector();
-            post({ type: "seek", t: start + Math.min(0.3, length / 2) });
-          };
-          attachTrim(block, track, shot, total);
-          track.appendChild(block);
-        }
-
-        row.appendChild(track);
-        body.appendChild(row);
-        drawShotInspector();
-      }
-
-      // Drag an edge of a shot to move its in or out point in its clip.
-      function attachTrim(block, track, shot, total) {
-        for (const handle of block.querySelectorAll(".tl-h")) {
-          handle.addEventListener("pointerdown", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            try { handle.setPointerCapture(e.pointerId); } catch { /* not critical */ }
-            const clip = clipOf(shot);
-            const perSec = track.getBoundingClientRect().width / total;
-            const startX = e.clientX;
-            const in0 = +shot.in || 0;
-            const out0 = shotOut(shot);
-            const left = handle.classList.contains("l");
-            let cutIn = in0;
-            let cutOut = out0;
-
-            const onMove = (ev) => {
-              const delta = (ev.clientX - startX) / perSec;
-              if (left) cutIn = Math.round(Math.max(0, Math.min(in0 + delta, out0 - 0.1)) * 20) / 20;
-              else cutOut = Math.round(Math.max(in0 + 0.1, Math.min(out0 + delta, clip.duration)) * 20) / 20;
-              block.style.width = ((cutOut - cutIn) / total) * 100 + "%";
-              block.querySelector(".lbl").textContent =
-                `${cutIn.toFixed(2)}s → ${cutOut.toFixed(2)}s`;
-            };
-            const onUp = async () => {
-              window.removeEventListener("pointermove", onMove);
-              window.removeEventListener("pointerup", onUp);
-              try { handle.releasePointerCapture(e.pointerId); } catch { /* gone */ }
-              if (cutIn === in0 && cutOut === out0) return;
-              await patchShot(shot.id, left
-                ? { in: cutIn }
-                : { out: Math.abs(cutOut - clip.duration) < 0.02 ? null : cutOut });
-            };
-            window.addEventListener("pointermove", onMove);
-            window.addEventListener("pointerup", onUp);
+      $("#fx-paste").onclick = async () => {
+        const v = videoById(selected);
+        if (!v || !clipboard) return;
+        let replace = false;
+        if (v.effects.length) {
+          const answer = await dialog({
+            title: `Coller sur « ${v.name} »`,
+            message: `Ce clip a déjà ${v.effects.length} effet${v.effects.length > 1 ? "s" : ""}.`,
+            choices: [
+              { value: "append", label: "Les ajouter à la suite" },
+              { value: "replace", label: "Remplacer les effets actuels" },
+            ],
+            choiceLabel: "Et les effets existants ?",
+            choiceValue: "append",
+            okLabel: "Coller",
           });
+          if (!answer) return;
+          replace = answer.choice === "replace";
         }
-      }
-
-      async function patchShot(shotId, body) {
-        await api(`/api/projects/${state.activeProject}/shots/${shotId}`, {
-          method: "PATCH",
+        const { pasted } = await api(`/api/videos/${v.id}/effects/paste`, {
+          method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ effects: clipboard.effects, replace }),
         });
         await refresh();
         preview();
-      }
-
-      function drawShotInspector() {
-        const el = $("#shot-insp");
-        const shots = state.sequence ? state.sequence.shots : [];
-        const index = shots.findIndex((x) => x.id === selectedShot);
-        const shot = shots[index];
-        el.hidden = mode !== "seq" || !shot;
-        if (!shot) { el.innerHTML = ""; return; }
-        const clip = clipOf(shot);
-
-        el.innerHTML = `
-          <span class="title">Plan ${index + 1}</span>
-          <span style="color:var(--muted)">${escapeHtml(clip ? clip.name : "clip manquant")}</span>
-          <label>Début <input type="number" id="si-in" step="0.05" min="0" value="${(+shot.in || 0).toFixed(2)}"></label>
-          <label>Fin <input type="number" id="si-out" step="0.05" min="0" value="${shotOut(shot).toFixed(2)}"></label>
-          <label>Entrée <select id="si-tr" ${index === 0 ? "disabled" : ""}></select></label>
-          <span class="grow"></span>
-          <button id="si-left" title="Avancer ce plan" ${index === 0 ? "disabled" : ""}>◀</button>
-          <button id="si-right" title="Reculer ce plan" ${index === shots.length - 1 ? "disabled" : ""}>▶</button>
-          <button id="si-edit" title="Ouvrir ce clip en mode Clip">Éditer le clip</button>
-          <button id="si-del" title="Retirer ce plan de la séquence">×</button>`;
-
-        const tr = $("#si-tr");
-        for (const o of state.options.transitions) {
-          const opt = document.createElement("option");
-          opt.value = o.value;
-          opt.textContent = o.label;
-          if (o.value === (shot.transition || "cut")) opt.selected = true;
-          tr.appendChild(opt);
-        }
-        tr.onchange = () => patchShot(shot.id, { transition: tr.value });
-        $("#si-in").onchange = () => patchShot(shot.id, { in: $("#si-in").valueAsNumber });
-        $("#si-out").onchange = () => {
-          const v = $("#si-out").valueAsNumber;
-          patchShot(shot.id, { out: clip && Math.abs(v - clip.duration) < 0.02 ? null : v });
-        };
-        $("#si-left").onclick = () => patchShot(shot.id, { index: index - 1 });
-        $("#si-right").onclick = () => patchShot(shot.id, { index: index + 1 });
-        $("#si-edit").onclick = async () => {
-          setMode("clip");
-          await select(shot.videoId);
-        };
-        $("#si-del").onclick = async () => {
-          await api(`/api/projects/${state.activeProject}/shots/${shot.id}`, { method: "DELETE" });
-          selectedShot = null;
-          await refresh();
-          preview();
-        };
-      }
-
-      async function addToSequence(videoId) {
-        const { shot } = await api(`/api/projects/${state.activeProject}/shots`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ videoId }),
-        });
-        selectedShot = shot.id;
-        await refresh();
-        setMode("seq");
-        const laid = laidShots();
-        const at = laid.find((x) => x.shot.id === shot.id);
-        preview({ at: at ? at.start + 0.2 : 0 });
-      }
+        setStatus(`${pasted} effet${pasted > 1 ? "s" : ""} collé${pasted > 1 ? "s" : ""} sur « ${v.name} ».`);
+      };
 
       // ------------------------------------------------------------- wiring
 
@@ -1760,11 +1719,6 @@
         drawStack();
         drawTimeline();
         drawFormat();
-        if (selectedShot && !(state.sequence?.shots || []).some((x) => x.id === selectedShot)) {
-          selectedShot = null;
-        }
-        drawSequence();
-        $("#tl").hidden = mode !== "clip" || !videoById(selected);
 
         if (focus) {
           const el = document.querySelector(
@@ -1837,7 +1791,7 @@
         // at frame 0 most of them have not animated in yet, which reads as
         // "nothing happened".
         const v = videoById(selected);
-        preview(mode === "clip" && v ? { at: showcaseTime(v, effect) } : {});
+        preview({ at: v ? showcaseTime(v, effect) : 0 });
 
         const card = document.querySelector(`.fx[data-fx="${effect.id}"]`);
         if (card) {
@@ -1851,9 +1805,7 @@
         $("#render").disabled = true;
         $("#prog").hidden = false;
         try {
-          const { job } = await api(mode === "seq"
-            ? `/api/projects/${state.activeProject}/render`
-            : `/api/videos/${selected}/render`, { method: "POST" });
+          const { job } = await api(`/api/videos/${selected}/render`, { method: "POST" });
           const done = await waitJob(job.id);
           setStatus(`Rendu terminé — <a href="${done.result.output}" download>télécharger le MP4</a>`);
         } catch (error) {
@@ -1866,6 +1818,7 @@
 
       // Space toggles playback unless a field has focus.
       document.addEventListener("keydown", (e) => {
+        if (!$("#dlg").hidden) return;
         const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
         if (e.code === "Space" && !typing && !$("#play").disabled) {
           e.preventDefault();
