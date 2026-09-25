@@ -845,8 +845,11 @@ async function main() {
   const server = http.createServer(handler);
   const port = await listen(server, wanted, 12);
   refused = makeGuard(port);
+  // The launcher (bin/studio.sh) reads this to open the port we actually got —
+  // not necessarily 3002, if something else already held it.
+  await fsp.writeFile(path.join(ROOT, ".studio-port"), String(port));
 
-  console.log(`\n  Studio prêt    http://localhost:${port}`);
+  console.log(`\n  Mon Studio HyperFrame · prêt sur http://localhost:${port}`);
   const active = store.activeProject();
   console.log(`  ${store.state.projects.length} projet(s) · ` + `${active ? active.videos.length : 0} vidéo(s) dans « ${active ? active.name : "—"} »\n`);
 }

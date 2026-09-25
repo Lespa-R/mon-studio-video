@@ -1,13 +1,16 @@
 {
-  "name": "video-behind-text",
+  "name": "mon-studio-hyperframe",
   "private": true,
   "type": "module",
   "scripts": {
+    "studio": "bin/studio.sh",
     "start": "node server/server.mjs",
     "behind": "node bin/behind.mjs",
     "dev": "npx --yes hyperframes@0.8.75 preview",
     "check": "npx --yes hyperframes@0.8.75 check",
     "render": "npx --yes hyperframes@0.8.75 render",
     "test": "node --test"
-  }
+  },
+  "version": "1.0.0",
+  "description": "Mon Studio HyperFrame — ajoute des éléments HyperFrames sur tes plans vidéo, en local."
 }

@@ -81,8 +81,7 @@ test("the catalogue sent to the UI is plain JSON", () => {
   assert.deepEqual(JSON.parse(JSON.stringify(list)), list);
 });
 
-test("a title containing </script> cannot break out of the composition's script",
-  { todo: "lot 3 : échapper le texte injecté dans le <script>" }, () => {
+test("a title containing </script> cannot break out of the composition's script", () => {
     // Every <script> the composition opens must be closed by a tag it wrote
     // itself; the text must not contribute a closing tag of its own.
     const text = "Fin</script><b>";
