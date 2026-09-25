@@ -65,7 +65,9 @@ else to wire.
   timed: true,                  // false = whole clip (e.g. CSS filters)
   space: "stage",               // "stage" (moves with the footage) or "canvas" (output frame)
   layer: "front",               // "behind" (under the cut-out) | "front" | "top"
-  schema: [{ key, label, type: "text|color|number|range|select", default, ... }],
+  needsFace: false,             // true only if placed from the face box (behind-text)
+  schema: [{ key, label, type: "text|color|number|range|select|image", default,
+             showIf: { key: "mode", values: ["image"] } /* optional */ }],
   build(fx, video) {            // → { layer, needsMatte, css, html, init, timeline } or null
     const t = timingOf(fx, video);           // { start, duration, end, full }
     ...
@@ -91,7 +93,13 @@ Rules that keep compositions correct:
 - **Deterministic only**: no `Math.random`, no `Date.now`, no infinite GSAP
   repeats (they give the root timeline an infinite duration). Grain uses a
   fixed-seed `feTurbulence` + a stepped tween.
-- **z-index**: bg 1 · behind 10–11 · cut-out 50 · tint 55 · front 60–62 ·
+- **Field types.** `image` uploads to `POST /api/assets` and stores the returned
+  name (`asset_<hex>.png|jpg|webp`); validate it with `ASSET_NAME` before using
+  it in markup. `showIf` hides a field unless another param has one of the
+  listed values — the UI and the library editor both honour it.
+- **Layers that stand in for the footage** (like `bg-replace`) get the class
+  `footage-layer`: `compose.mjs` gives them the clip's grade.
+- **z-index**: bg 1 · replaced background 2 · behind 10–11 · cut-out 50 · tint 55 · front 60–62 ·
   vignette 80 · grain 82 · bands 88 · fade 90.
 - Image treatments return `filters: { footage: [...], bg: [...] }` instead of
   markup; `compose.mjs` concatenates them per layer.

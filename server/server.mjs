@@ -225,6 +225,7 @@ const MIME = {
   ".html": "text/html", ".css": "text/css", ".js": "text/javascript",
   ".json": "application/json", ".mp4": "video/mp4", ".mov": "video/quicktime",
   ".webm": "video/webm", ".m4v": "video/mp4", ".svg": "image/svg+xml",
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
 };
 
 // Serve a file with Range support — the browser needs it to scrub video.
@@ -306,6 +307,45 @@ async function addVideo(req, res) {
   send(res, 200, { video });
 }
 
+// Images used by effects (a replacement background). Checked by extension and
+// by their first bytes, and stored under a name the studio chooses — the
+// effect only accepts names of that shape (ASSET_NAME in effects-image.mjs).
+const IMAGE_SIGNATURES = {
+  ".png": (b) => b.length > 8 && b[0] === 0x89 && b.toString("ascii", 1, 4) === "PNG",
+  ".jpg": (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  ".webp": (b) => b.length > 12 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP",
+};
+IMAGE_SIGNATURES[".jpeg"] = IMAGE_SIGNATURES[".jpg"];
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+
+async function addAsset(req, res) {
+  const original = decodeURIComponent(req.headers["x-filename"] || "");
+  const ext = path.extname(original).toLowerCase();
+  const looksRight = IMAGE_SIGNATURES[ext];
+  if (!looksRight) {
+    return send(res, 400, { error: "Format d'image non pris en charge : PNG, JPEG ou WebP." });
+  }
+
+  const chunks = [];
+  let size = 0;
+  await new Promise((resolve, reject) => {
+    req.on("data", (c) => {
+      size += c.length;
+      if (size <= MAX_IMAGE_BYTES) chunks.push(c);
+    });
+    req.on("end", resolve);
+    req.on("error", reject);
+  });
+  if (size > MAX_IMAGE_BYTES) return send(res, 413, { error: "Image trop lourde : 25 Mo maximum." });
+
+  const bytes = Buffer.concat(chunks);
+  if (!looksRight(bytes)) return send(res, 400, { error: "Ce fichier n'est pas une image valide." });
+
+  const file = `asset_${crypto.randomBytes(8).toString("hex")}${ext === ".jpeg" ? ".jpg" : ext}`;
+  await fsp.writeFile(path.join(MEDIA, file), bytes);
+  send(res, 200, { file });
+}
+
 async function dropMedia(video) {
   const { bg, fg } = mediaNames(video);
   await fsp.rm(path.join(MEDIA, bg), { force: true });
@@ -332,6 +372,8 @@ async function handleApi(req, res, url) {
       options: { aspects: ASPECTS, sizes: SIZES, fits: FITS, focuses: FOCUSES, fills: FILLS },
     });
   }
+
+  if (section === "assets" && req.method === "POST" && !id) return addAsset(req, res);
 
   if (section === "jobs" && req.method === "GET") {
     const job = jobs.get(id);

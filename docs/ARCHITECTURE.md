@@ -168,6 +168,7 @@ off on their way out.
 |---|---|---|
 | **Étalonnage** | Exposure, contrast, saturation, colour temperature | no |
 | **Flou d'arrière-plan** | Blurs the room, leaves you sharp | yes |
+| **Remplacer l'arrière-plan** | Swaps the room for an uploaded image, a gradient or a colour | yes |
 | **Vignettage** | Darkens the corners | no |
 | **Grain argentique** | Film grain, with adjustable flicker rate | no |
 | **Bandes cinéma** | Letterbox bars, 2.39 / 2.00 / 1.85 / 16:10 | no |

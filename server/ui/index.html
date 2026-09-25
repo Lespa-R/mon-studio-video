@@ -298,6 +298,12 @@
       input[type="range"] { width: 100%; accent-color: var(--accent); }
       input[type="color"] { width: 100%; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
       .rangewrap { display: flex; align-items: center; gap: 7px; }
+      .imgpick { display: flex; align-items: center; gap: 8px; }
+      .imgpick .thumb {
+        width: 64px; height: 36px; flex: 0 0 64px; border-radius: 5px;
+        border: 1px solid var(--line); background: #11161e center / cover no-repeat;
+      }
+      .imgpick button { flex: 1; font-size: 12px; padding: 5px 8px; }
       .rangewrap input[type="range"] { flex: 1; min-width: 0; }
       .hint { font-size: 11.5px; color: var(--muted); padding: 0 12px 10px; }
       .warn { color: #ffb454; }
@@ -644,12 +650,13 @@
           const body = document.createElement("div");
           body.className = "fx-body";
           for (const f of def.schema) {
+            if (!fieldApplies(def, f, fx.params)) continue;
             body.appendChild(field(f, fx.params[f.key], (value) =>
               patch(v.id, fx.id, { params: { [f.key]: value } }), fx.id));
           }
           card.appendChild(body);
 
-          if (def.needsMatte && !v.face) {
+          if (def.needsFace && !v.face) {
             const w = document.createElement("div");
             w.className = "hint warn";
             w.textContent = "Aucun visage détecté sur ce clip : cet effet sera ignoré.";
@@ -657,6 +664,15 @@
           }
           el.appendChild(card);
         }
+      }
+
+      // A field can apply only in some modes (showIf: { key, values }): the
+      // colour of a gradient means nothing once an image is chosen.
+      function fieldApplies(def, f, params) {
+        if (!f.showIf) return true;
+        const ruler = def.schema.find((x) => x.key === f.showIf.key);
+        const current = params[f.showIf.key] ?? (ruler ? ruler.default : undefined);
+        return f.showIf.values.includes(String(current));
       }
 
       // One control from a schema entry. Used by both the timeline's effect
@@ -714,6 +730,40 @@
           input.type = "color"; input.value = value;
           input.onchange = () => onChange(input.value);
           wrap.appendChild(input);
+        } else if (f.type === "image") {
+          // A thumbnail and a picker. The file is uploaded to the studio, which
+          // answers with the name the effect stores (media/asset_….ext).
+          const holder = document.createElement("div");
+          holder.className = "imgpick";
+          const thumb = document.createElement("div");
+          thumb.className = "thumb";
+          if (value) thumb.style.backgroundImage = `url("/media/${encodeURIComponent(value)}")`;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = value ? "Changer…" : "Choisir une image…";
+          input = document.createElement("input");
+          input.type = "file";
+          input.accept = "image/png,image/jpeg,image/webp";
+          input.hidden = true;
+          button.onclick = () => input.click();
+          input.onchange = async () => {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            button.disabled = true;
+            button.textContent = "Envoi…";
+            try {
+              const { file: stored } = await api("/api/assets", {
+                method: "POST",
+                headers: { "x-filename": encodeURIComponent(file.name) },
+                body: file,
+              });
+              onChange(stored);
+            } finally {
+              button.disabled = false;
+            }
+          };
+          holder.append(thumb, button, input);
+          wrap.appendChild(holder);
         } else {
           input = document.createElement("input");
           input.type = f.type === "number" ? "number" : "text";
@@ -1377,6 +1427,7 @@
         const def = state.effects.find((e) => e.type === preset.type);
         if (!def) return;
         for (const f of def.schema) {
+          if (!fieldApplies(def, f, preset.params)) continue;
           editor.appendChild(field(f, preset.params[f.key], async (value) => {
             await api(`/api/presets/${preset.id}`, {
               method: "PATCH",

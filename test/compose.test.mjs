@@ -141,3 +141,47 @@ test("a recrop narrows the width text may use", () => {
   assert.ok(max(narrow) < max(wide));
   assert.ok(max(narrow) <= 405);
 });
+
+// ------------------------------------------------------ background replacement
+
+const replace = (params = {}) =>
+  fx("bg-replace", { params: { ...defaultParams("bg-replace"), ...params } });
+
+test("replacing the background needs the cut-out, and sits under it", () => {
+  const html = compose(video([replace()]), files);
+  assert.match(html, /id="fg"/, "the person is laid back over the new background");
+  const bgAt = html.indexOf('id="fx_bgreplace"');
+  assert.ok(bgAt > html.indexOf('id="bg"') && bgAt < html.indexOf('id="fg"'),
+    "between the original footage and the person");
+});
+
+test("text placed behind the person stays in front of the new background", () => {
+  const html = compose(video([replace(), fx("behind-text")]), files);
+  const z = (sel) => Number(new RegExp(`${sel} \\{[^}]*?z-index: (\\d+)`).exec(html)[1]);
+  assert.ok(z("#fx_bgreplace") < z("#fx_behindtext"));
+});
+
+test("an uploaded image is used as the background", () => {
+  const built = byType("bg-replace").build(replace({ mode: "image", image: "asset_0123456789abcdef.jpg" }), video());
+  assert.match(built.html, /<img class="fx_bgreplace-bg" src="media\/asset_0123456789abcdef\.jpg"/);
+});
+
+test("an image param that is not a studio asset name is ignored, never injected", () => {
+  for (const image of ['x.jpg" onerror="alert(1)', "../../etc/passwd.png", "asset_zz.png", "asset_0123456789abcdef.svg"]) {
+    const built = byType("bg-replace").build(replace({ mode: "image", image }), video());
+    assert.doesNotMatch(built.html, /<img/, image);
+  }
+});
+
+test("a gradient and a flat colour need no image", () => {
+  const g = byType("bg-replace").build(replace({ mode: "gradient", angle: 90 }), video());
+  assert.match(g.css, /linear-gradient\(90deg, #1e293b, #6d28d9\)/);
+  const c = byType("bg-replace").build(replace({ mode: "color", color: "#ff0000" }), video());
+  assert.match(c.css, /background: #ff0000/);
+});
+
+test("the grade reaches the new background, so it matches the person", () => {
+  const html = compose(video([replace(), fx("grade")]), files);
+  assert.match(html, /\.footage-layer \{ filter: [^}]*contrast\(/);
+  assert.match(html, /id="fx_bgreplace" class="clip footage-layer"/);
+});

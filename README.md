@@ -73,6 +73,7 @@ place automatiquement sur un moment où l'effet est visible.
 | **Bandeau (lower third)** | nom et fonction en bas à gauche |
 | **Étalonnage** | exposition, contraste, saturation, température |
 | **Flou d'arrière-plan** | floute la pièce, te garde net |
+| **Remplacer l'arrière-plan** | remplace la pièce derrière toi par ton image, un dégradé ou une couleur |
 | **Vignettage** | assombrit les coins |
 | **Grain argentique** | texture de pellicule |
 | **Bandes cinéma** | format large 2.39, 2.00… |
@@ -80,6 +81,17 @@ place automatiquement sur un moment où l'effet est visible.
 
 Chaque effet se règle dans sa carte. **Tape sur son titre pour le renommer.**
 La case à cocher l'active ou le désactive, `×` le retire.
+
+### Remplacer l'arrière-plan
+
+Ajoute l'effet **Remplacer l'arrière-plan**, choisis **Fond : Image**, puis
+**Choisir une image…** (PNG, JPEG ou WebP, 25 Mo max). Un léger **flou** et une
+**luminosité** un peu baissée rendent le montage plus naturel. Le texte « derrière
+moi » reste devant le nouveau fond mais derrière toi, et l'étalonnage
+s'applique aussi au décor.
+
+> Les contours très fins (cheveux) peuvent garder un léger liseré de la couleur
+> de ta pièce, visible surtout en gros plan sur un fond très différent.
 
 ### 3. Placer les effets dans le temps
 
@@ -121,7 +133,7 @@ Tout est dans le dossier du projet :
 | Chemin | Contenu |
 |---|---|
 | `studio.json` | ta bibliothèque : projets, dossiers, effets, préréglages |
-| `media/` | tes clips importés et leurs découpes |
+| `media/` | tes clips importés, leurs découpes, et les images de fond (`asset_….png`) |
 | `renders/` | les MP4 exportés |
 
 Ces trois-là ne partent **pas** sur GitHub (ils sont personnels et lourds).
