@@ -13,17 +13,38 @@ Or one-shot from the terminal:
 node bin/behind.mjs --video ~/Desktop/clip.mov --text "Hello World" --render
 ```
 
+## Projects and folders
+
+The library is organised as **folders → projects → clips**. A project holds its
+own clips and their effect stacks; folders only group projects, and deleting
+one keeps the projects inside it (they move back to the root). Deleting a
+project deletes its clips and their derived media.
+
+Everything lives in `studio.json`, which is gitignored — it points at local
+media files, so it is yours, not the repo's. `lib/store.mjs` migrates a v1 file
+(a flat list of clips) into a project called *Projet 1* on first load.
+
 ## The interface
 
 Three columns:
 
-- **Vidéos** — drag & drop to add, `×` to remove (the clip and its derived files
-  are deleted). Adding a clip probes it, bakes in any rotation, and locates the
-  face across 24 samples.
+- **Projets** — the folder/project tree, with `+ Projet` and `+ Dossier`.
+  Click a project to switch to it; `✎` renames, `×` deletes.
+- **Vidéos** — the clips of the active project. Drag & drop to add, `×` to
+  remove (the clip and its derived files are deleted). Adding a clip probes it,
+  bakes in any rotation, and locates the face across 24 samples.
 - **Aperçu** — the live composition in an iframe, with play / restart, and a
   **timeline** below it. Every change re-renders it.
 - **Effets** — add from the catalogue, tune the parameters, toggle with the
   checkbox, remove with `×`. Effects stack; order is the order you added them.
+
+  **Rename any effect** by typing over its title — the name follows it into the
+  timeline. Leave it empty to fall back to the catalogue label.
+
+  **★ saves the effect as a preset**: its type and its current parameters, under
+  a name you choose. Presets appear under *Mes préréglages* in the add picker
+  and are listed below it, where `×` removes them. They are per-studio, not
+  per-project, so a look you like is one click away on any clip.
 
 `Rendre le MP4` writes the file to `renders/` and hands you a download link.
 
