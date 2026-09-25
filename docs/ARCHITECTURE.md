@@ -181,6 +181,15 @@ so a 9:16 export gets a layout of its own rather than a scaled landscape one.
   (a "spot" wrapper and the animated child): a GSAP tween on `x`/`y` would
   otherwise overwrite a `translate(-50%)` centring.
 
+**Dragging on the preview.** The preview iframe is same-origin, so the UI reads
+the boxes marked `data-drag="<fx id>"` straight from its document and lays a
+handle over each (only while paused and inside the effect's window). During a
+drag the element's root gets a CSS `translate` — it composes with the
+transforms GSAP writes — and on drop the UI patches the params: `position:
+"free"` with `x` / `y` as the box's new centre, or, for the arrow, `x` / `y`
+shifted by the move. The composition then centres the box on (x %, y %) with
+`translate(-50%, -50%)` on a wrapper that no tween touches.
+
 Text effects take an **Animation** param (`TEXT_ANIMS` in `lib/effects.mjs`):
 each style animates a unit — letters (`-ch`), words (`-wd`) or the whole line
 (a `clip-path` wipe) — and `textTimeline()` compresses it to fit the window.

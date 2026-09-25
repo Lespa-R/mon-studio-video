@@ -70,6 +70,7 @@ wire.
   space: "stage",               // "stage" (moves with the footage) or "canvas" (output frame)
   layer: "front",               // "behind" (under the cut-out) | "front" | "top"
   needsFace: false,             // true only if placed from the face box (behind-text)
+  drag: { key: "position" },    // optional: draggable on the preview (see below)
   schema: [{ key, label, type: "text|color|number|range|select|image", default,
              showIf: { key: "mode", values: ["image"] } /* optional */ }],
   build(fx, video) {            // → { layer, needsMatte, css, html, init, timeline } or null
@@ -111,6 +112,12 @@ Rules that keep compositions correct:
   and go through `paint()` / `paintAlpha()` from `lib/brand.mjs` — never raw into
   CSS. Text uses `font-family: var(--font-title)` or `var(--font-body)`. The kit
   itself reaches `build()` as `video.brand` (the logo effect reads its `logo`).
+- **Dragging on the preview.** `drag: { key }` means a drop sets
+  `params[key] = "free"` plus `x` / `y` (% of the frame) = the box's new centre;
+  `drag: { delta: true }` adds the move to `x` / `y` (the arrow's target). Mark
+  the grabbable box(es) with `data-drag="${id}"`, give the position select a
+  `"free"` option and the `freeXY(key)` fields, and centre on
+  `freeSpot(p)` in free mode (see `lib/effects-anim.mjs`).
 - **Placement vs animation transforms**: put a `translate(-50%)` centring on a
   wrapper and tween the child — a GSAP `x`/`y` tween overwrites the transform.
 

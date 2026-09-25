@@ -282,3 +282,21 @@ test("lists split on slashes and never inject markup", () => {
   assert.equal((built.html.match(/-li"/g) || []).length, 3);
   assert.doesNotMatch(built.html, /<b>/);
 });
+
+test("a dragged element is centred on its x / y, and every draggable one marks its box", () => {
+  for (const effect of EFFECTS.filter((e) => e.drag)) {
+    const params = { ...defaultParams(effect.type) };
+    if (effect.drag.key) Object.assign(params, { [effect.drag.key]: "free", x: 25, y: 75 });
+    const video = effect.type === "logo" ? { ...canvas, brand: { logo: "asset_0123456789abcdef.png" } } : canvas;
+    const built = effect.build(fx(effect.type, { params }), video);
+    assert.match(built.html, /data-drag="fx_/, effect.type);
+    if (effect.drag.key) assert.match(built.css, /left: 25%; top: 75%;\s*transform: translate\(-50%, -50%\)/, effect.type);
+  }
+});
+
+test("the catalogue tells the UI how each element is dragged", () => {
+  const list = catalogue();
+  assert.deepEqual(list.find((e) => e.type === "counter").drag, { key: "position" });
+  assert.deepEqual(list.find((e) => e.type === "arrow").drag, { delta: true });
+  assert.equal(list.find((e) => e.type === "progress").drag, null);
+});

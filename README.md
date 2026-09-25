@@ -92,6 +92,14 @@ Le menu est classé en trois familles : **Textes**, **Animations**, **Image**.
 Chaque effet se règle dans sa carte. **Tape sur son titre pour le renommer.**
 La case à cocher l'active ou le désactive, `×` le retire.
 
+**Déplacer une animation à la souris** : quand l'aperçu est en pause, chaque
+animation visible à cet instant a un cadre pointillé (au survol de l'aperçu).
+**Fais-la glisser** où tu veux ; sa position passe en « Libre » et deux
+curseurs, Horizontal et Vertical, permettent d'ajuster au pour cent près.
+Un simple clic sur le cadre ouvre sa carte de réglages, **Échap** annule un
+glisser en cours. La flèche se déplace avec sa cible ; la barre de progression
+reste en haut ou en bas.
+
 Les textes (**Texte derrière moi**, **Titre devant**) ont un réglage
 **Animation** : Flou montant, Rebond, Glissement, Machine à écrire, Mot par mot,
 Balayage.

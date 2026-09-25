@@ -153,6 +153,23 @@
       }
       .frame.busy::after { opacity: 1; }
       .fx.flash { animation: flash 1.1s ease-out; }
+
+      /* drag handles over the preview ----------------------------------- */
+      .handles { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+      .handles[hidden] { display: none; }
+      .handle {
+        position: absolute; pointer-events: auto; cursor: grab; touch-action: none;
+        border: 1.5px dashed transparent; border-radius: 6px; transition: border-color .12s, background .12s;
+      }
+      .frame:hover .handle { border-color: rgba(255,255,255,.6); }
+      .handle:hover { background: rgba(79,140,255,.10); border-color: var(--accent) !important; }
+      .handle.dragging { cursor: grabbing; border-style: solid; border-color: var(--accent) !important; background: rgba(79,140,255,.14); }
+      .handle span {
+        position: absolute; left: -1.5px; bottom: 100%; margin-bottom: 3px;
+        font-size: 10.5px; line-height: 1.5; background: var(--accent); color: #fff;
+        padding: 0 6px; border-radius: 4px; white-space: nowrap; opacity: 0; pointer-events: none;
+      }
+      .frame:hover .handle span, .handle.dragging span { opacity: 1; }
       @keyframes flash {
         from { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,140,255,.18); }
         to { border-color: var(--line); box-shadow: none; }
@@ -1266,6 +1283,180 @@
       }
 
       // Playhead, read straight off the preview's background video.
+      // ------------------------------------------- drag on the preview
+
+      // Every animation that can move (its catalogue entry has `drag`) gets
+      // a handle over the preview while it is on screen and the preview is
+      // paused. The handle is sized on the element's own box, read straight
+      // from the preview's document (same origin) and mapped through the
+      // scale the frame applies. Dropping it writes the new position:
+      //   drag.key   → params[key] = "free", x / y = the box's new centre (%)
+      //   drag.delta → x / y shifted by the move (the arrow's target)
+      let handlesAt = 0;
+      let dragging = null;
+
+      function previewDoc() {
+        try {
+          const iframe = $("#frame iframe");
+          const w = iframe && iframe.contentWindow;
+          if (!w || !w.__studioTime) return null;
+          return { iframe, doc: iframe.contentDocument, t: w.__studioTime() };
+        } catch { return null; }
+      }
+
+      // The union of the element's marked parts, in canvas pixels.
+      function dragBox(doc, fxId) {
+        let box = null;
+        for (const el of doc.querySelectorAll(`[data-drag="${fxId}"]`)) {
+          const r = el.getBoundingClientRect();
+          if (!r.width && !r.height) continue;
+          box = box
+            ? { left: Math.min(box.left, r.left), top: Math.min(box.top, r.top),
+                right: Math.max(box.right, r.right), bottom: Math.max(box.bottom, r.bottom) }
+            : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        }
+        return box;
+      }
+
+      function drawHandles() {
+        const frame = $("#frame");
+        let layer = frame.querySelector(".handles");
+        const v = videoById(selected);
+        const p = !playing && !$("#view-edit").hidden && v ? previewDoc() : null;
+        if (!p) { if (layer && !dragging) layer.hidden = true; return; }
+        if (dragging) return;
+        if (!layer) {
+          layer = document.createElement("div");
+          layer.className = "handles";
+          frame.appendChild(layer);
+        }
+        layer.hidden = false;
+
+        const fr = frame.getBoundingClientRect();
+        const ir = p.iframe.getBoundingClientRect();
+        const k = ir.width / (p.iframe.offsetWidth || ir.width);
+        const ox = ir.left - fr.left - frame.clientLeft;
+        const oy = ir.top - fr.top - frame.clientTop;
+        const seen = new Set();
+
+        for (const fx of v.effects) {
+          const def = state.effects.find((e) => e.type === fx.type);
+          if (!def || !def.drag || fx.enabled === false) continue;
+          // Only while it is on screen.
+          const start = Number(fx.start) || 0;
+          const end = fx.duration == null ? v.duration : start + Number(fx.duration);
+          if (p.t < start || p.t > end) continue;
+          const box = dragBox(p.doc, fx.id);
+          if (!box) continue;
+          seen.add(fx.id);
+
+          let h = layer.querySelector(`[data-h="${fx.id}"]`);
+          if (!h) {
+            h = document.createElement("div");
+            h.className = "handle";
+            h.dataset.h = fx.id;
+            h.title = "Glisse pour déplacer · clique pour régler";
+            h.appendChild(document.createElement("span"));
+            h.addEventListener("pointerdown", (e) => startDrag(e, h, fx.id));
+            layer.appendChild(h);
+          }
+          h.querySelector("span").textContent = fx.name || def.label;
+          const pad = 4;
+          h.style.left = ox + box.left * k - pad + "px";
+          h.style.top = oy + box.top * k - pad + "px";
+          h.style.width = (box.right - box.left) * k + pad * 2 + "px";
+          h.style.height = (box.bottom - box.top) * k + pad * 2 + "px";
+        }
+        for (const h of [...layer.children]) if (!seen.has(h.dataset.h)) h.remove();
+      }
+
+      function focusCard(fxId) {
+        const card = document.querySelector(`#stack .fx[data-fx="${fxId}"]`);
+        if (!card) return;
+        card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        card.classList.remove("flash");
+        void card.offsetWidth;
+        card.classList.add("flash");
+      }
+
+      function startDrag(e, handle, fxId) {
+        if (e.button !== 0) return;
+        const v = videoById(selected);
+        const p = previewDoc();
+        const fx = v && v.effects.find((x) => x.id === fxId);
+        const def = fx && state.effects.find((x) => x.type === fx.type);
+        if (!p || !def) return;
+        e.preventDefault();
+        // Followed on the window, so a fast move that leaves the handle (or
+        // lands over the iframe) is not lost.
+        try { handle.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+
+        const ir = p.iframe.getBoundingClientRect();
+        const W = p.iframe.offsetWidth;
+        const H = p.iframe.offsetHeight;
+        const k = ir.width / W;
+        const box = dragBox(p.doc, fxId);
+        const root = p.doc.getElementById(fxId);
+        const x0 = e.clientX;
+        const y0 = e.clientY;
+        const left = parseFloat(handle.style.left);
+        const top = parseFloat(handle.style.top);
+        let dx = 0;
+        let dy = 0;
+        dragging = { fxId };
+        handle.classList.add("dragging");
+
+        const move = (ev) => {
+          dx = ev.clientX - x0;
+          dy = ev.clientY - y0;
+          handle.style.left = left + dx + "px";
+          handle.style.top = top + dy + "px";
+          // Live feedback: the CSS `translate` property composes with the
+          // transforms GSAP writes, so nothing else in the element moves.
+          if (root) root.style.translate = `${dx / k}px ${dy / k}px`;
+        };
+        const end = (ev, cancelled) => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", cancel);
+          window.removeEventListener("keydown", escape, true);
+          handle.classList.remove("dragging");
+          dragging = null;
+          const moved = Math.hypot(dx, dy) > 3;
+          if (cancelled || !moved) {
+            if (root) root.style.translate = "";
+            if (!cancelled) focusCard(fxId);
+            return;
+          }
+          const clamp = (n) => Math.round(Math.min(100, Math.max(0, n)) * 2) / 2;
+          const cdx = dx / k;
+          const cdy = dy / k;
+          let params;
+          if (def.drag.delta) {
+            const at = (key) => {
+              const f = def.schema.find((x) => x.key === key);
+              return Number(fx.params[key] ?? (f ? f.default : 50));
+            };
+            params = { x: clamp(at("x") + (cdx / W) * 100), y: clamp(at("y") + (cdy / H) * 100) };
+          } else {
+            const cx = (box.left + box.right) / 2 + cdx;
+            const cy = (box.top + box.bottom) / 2 + cdy;
+            params = { [def.drag.key]: "free", x: clamp((cx / W) * 100), y: clamp((cy / H) * 100) };
+          }
+          focusCard(fxId);
+          setStatus(`« ${fx.name || def.label} » déplacé.`);
+          patch(v.id, fxId, { params });
+        };
+        const up = (ev) => end(ev, false);
+        const cancel = (ev) => end(ev, true);
+        // Escape puts it back where it was.
+        const escape = (ev) => { if (ev.key === "Escape") { ev.preventDefault(); end(ev, true); } };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", cancel);
+        window.addEventListener("keydown", escape, true);
+      }
+
       (function trackPlayhead() {
         function place(headSel, hostSel, rulerSel, duration, t) {
           const head = $(headSel);
@@ -1287,6 +1478,8 @@
             if (w.__studioTime) { t = w.__studioTime(); duration = w.__studioDuration; }
           } catch { /* iframe mid-reload */ }
           place("#tl-head", "#tl", "#tl .tl-ruler .tl-track", duration, t);
+          const now = performance.now();
+          if (now - handlesAt > 120) { handlesAt = now; drawHandles(); }
           requestAnimationFrame(frame);
         }
         requestAnimationFrame(frame);
