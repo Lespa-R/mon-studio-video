@@ -42,9 +42,30 @@ Three columns:
   timeline. Leave it empty to fall back to the catalogue label.
 
   **★ saves the effect as a preset**: its type and its current parameters, under
-  a name you choose. Presets appear under *Mes préréglages* in the add picker
-  and are listed below it, where `×` removes them. They are per-studio, not
-  per-project, so a look you like is one click away on any clip.
+  a name you choose. Presets appear under *Mes préréglages* in the add picker.
+  They are per-studio, not per-project, so a look you like is one click away on
+  any clip — and the **Bibliothèque d'effets** tab is where you build and sort
+  them.
+
+## The effect library
+
+The second tab is a page of its own, for making looks rather than using them.
+
+- **Collections** — group presets. *Tous* and *Sans collection* are always
+  there; `+ Collection` adds your own, `✎` renames, `×` deletes (the presets
+  inside survive and fall back to ungrouped).
+- **Préréglages** — pick a base effect and `+ Nouveau préréglage` creates one
+  from scratch, no clip needed. It lands in the collection you are looking at.
+- **The editor** — the same schema-driven controls as the timeline's cards,
+  plus rename, move to another collection, **Dupliquer** and **Supprimer**.
+
+Above the editor is a **live preview**: the clip of your choice with this
+preset as its *only* effect, so you tune a look without whatever else is on
+that clip's timeline fighting it. Pick the clip from the dropdown; the matte is
+built on demand and cached like anywhere else.
+
+`lib/store.mjs` migrates a v2 file (presets with no collection) on first
+load.
 
 `Rendre le MP4` writes the file to `renders/` and hands you a download link.
 

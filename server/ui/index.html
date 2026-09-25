@@ -30,7 +30,39 @@
       header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
       header .sub { color: var(--muted); font-size: 13px; }
 
+      header nav { display: flex; gap: 4px; margin-left: auto; }
+      header nav button {
+        font-size: 12.5px; padding: 5px 12px; border-radius: 7px;
+        background: transparent; border: 1px solid transparent; color: var(--muted);
+      }
+      header nav button.on { background: var(--panel-2); border-color: var(--line); color: var(--text); }
+
       main { flex: 1; display: grid; grid-template-columns: 260px 1fr 340px; min-height: 0; }
+      main[hidden] { display: none; }
+      main.lib { grid-template-columns: 210px 280px 1fr; }
+
+      /* library page -------------------------------------------------- */
+      .lib-new { display: grid; gap: 6px; padding: 0 12px 10px; }
+      .lib-item {
+        display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+        border-radius: 8px; cursor: pointer; margin-bottom: 4px;
+        border: 1px solid transparent;
+      }
+      .lib-item:hover { background: var(--panel); }
+      .lib-item.on { background: var(--panel-2); border-color: var(--accent); }
+      .lib-item .meta { flex: 1; min-width: 0; }
+      .lib-item .nm { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .lib-item .base { font-size: 11px; color: var(--muted); }
+      .lib-item .x { opacity: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 5px; padding: 2px 5px; }
+      .lib-item:hover .x { opacity: 1; }
+      .lib-item .x:hover { color: var(--danger); background: rgba(255,95,86,.12); }
+      .lib-stage { display: flex; flex-direction: column; min-height: 0; padding: 16px; gap: 12px; }
+      .lib-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .lib-actions .grow { flex: 1; }
+      .lib-editor { overflow-y: auto; display: grid; gap: 9px; padding-right: 4px; }
+      .lib-title { display: flex; gap: 8px; align-items: center; }
+      .lib-title input { font-size: 14px; font-weight: 600; }
+      .lib-empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
       .col { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
       .col + .col { border-left: 1px solid var(--line); }
       .col h2 {
@@ -236,9 +268,13 @@
     <header>
       <h1>Studio</h1>
       <span class="sub" id="head-sub">bibliothèque locale · rendu HyperFrames</span>
+      <nav>
+        <button id="tab-edit" class="on">Montage</button>
+        <button id="tab-lib">Bibliothèque d'effets</button>
+      </nav>
     </header>
 
-    <main>
+    <main id="view-edit">
       <section class="col">
         <h2>Projets</h2>
         <div class="tree" id="tree"></div>
@@ -287,6 +323,45 @@
         <div class="hint" id="fx-hint"></div>
         <div class="presets" id="presets"></div>
         <div class="scroll" id="stack"></div>
+      </section>
+    </main>
+
+    <main id="view-lib" class="lib" hidden>
+      <section class="col">
+        <h2>Collections</h2>
+        <div class="tree" id="collections"></div>
+        <div class="tree-actions">
+          <button id="new-collection">+ Collection</button>
+        </div>
+      </section>
+
+      <section class="col">
+        <h2>Préréglages</h2>
+        <div class="lib-new">
+          <select id="lib-base"></select>
+          <button id="lib-create">+ Nouveau préréglage</button>
+        </div>
+        <div class="scroll" id="lib-list"></div>
+      </section>
+
+      <section class="col">
+        <div class="lib-stage">
+          <div class="frame" id="lib-frame">
+            <div class="empty">Sélectionne un préréglage.</div>
+          </div>
+          <div class="lib-actions">
+            <select id="lib-clip" title="Clip d'aperçu"></select>
+            <button id="lib-play">Lecture</button>
+            <span class="grow"></span>
+            <button id="lib-dup">Dupliquer</button>
+            <button id="lib-del">Supprimer</button>
+          </div>
+          <div class="lib-title">
+            <input type="text" id="lib-name" placeholder="Nom du préréglage" />
+            <select id="lib-collection" style="width:auto;min-width:130px"></select>
+          </div>
+          <div class="lib-editor" id="lib-editor"></div>
+        </div>
       </section>
     </main>
 
@@ -406,7 +481,8 @@
           const body = document.createElement("div");
           body.className = "fx-body";
           for (const f of def.schema) {
-            body.appendChild(field(v, fx, f));
+            body.appendChild(field(f, fx.params[f.key], (value) =>
+              patch(v.id, fx.id, { params: { [f.key]: value } }), fx.id));
           }
           card.appendChild(body);
 
@@ -420,15 +496,17 @@
         }
       }
 
-      function field(video, fx, f) {
+      // One control from a schema entry. Used by both the timeline's effect
+      // cards and the library's preset editor, so they stay identical.
+      function field(f, value, onChange, tagId) {
         const wrap = document.createElement("div");
         wrap.className = "field";
         const label = document.createElement("label");
         label.textContent = f.label;
         wrap.appendChild(label);
-        const tag = (el) => { el.dataset.fx = fx.id; el.dataset.key = f.key; return el; };
+        const tag = (el) => { el.dataset.fx = tagId; el.dataset.key = f.key; return el; };
 
-        const value = fx.params[f.key] ?? f.default;
+        if (value === undefined || value === null) value = f.default;
         let input;
 
         if (f.type === "select") {
@@ -439,7 +517,7 @@
             if (String(value) === String(o.value)) opt.selected = true;
             input.appendChild(opt);
           }
-          input.onchange = () => patch(video.id, fx.id, { params: { [f.key]: input.value } });
+          input.onchange = () => onChange(input.value);
           wrap.appendChild(input);
         } else if (f.type === "range") {
           // Slider for feel, number box for precision — and the box accepts
@@ -457,13 +535,13 @@
           box.value = Number(value);
 
           input.oninput = () => { box.value = Number(input.value); };
-          input.onchange = () => patch(video.id, fx.id, { params: { [f.key]: Number(input.value) } });
+          input.onchange = () => onChange(Number(input.value));
           box.onchange = () => {
             // valueAsNumber sidesteps locale decimal separators
             const v = box.valueAsNumber;
             if (!Number.isFinite(v)) return;
             input.value = v;
-            patch(video.id, fx.id, { params: { [f.key]: v } });
+            onChange(v);
           };
 
           holder.appendChild(input); holder.appendChild(box);
@@ -471,7 +549,7 @@
         } else if (f.type === "color") {
           input = document.createElement("input");
           input.type = "color"; input.value = value;
-          input.onchange = () => patch(video.id, fx.id, { params: { [f.key]: input.value } });
+          input.onchange = () => onChange(input.value);
           wrap.appendChild(input);
         } else {
           input = document.createElement("input");
@@ -480,9 +558,7 @@
           if (f.min !== undefined) input.min = f.min;
           input.value = value;
           input.onchange = () =>
-            patch(video.id, fx.id, {
-              params: { [f.key]: f.type === "number" ? Number(input.value) : input.value },
-            });
+            onChange(f.type === "number" ? Number(input.value) : input.value);
           wrap.appendChild(input);
         }
         // Tag every control so refresh() can put the caret back where it was.
@@ -534,8 +610,10 @@
         for (const id of ["play", "restart", "refresh", "render"]) $("#" + id).disabled = true;
       }
 
-      function fitFrame(iframe, v) {
-        const box = $("#frame").getBoundingClientRect();
+      // The container must be passed in: the library has its own frame, and a
+      // hidden one measures zero, which would scale the iframe to nothing.
+      function fitFrame(iframe, v, host) {
+        const box = (host || iframe.parentElement || $("#frame")).getBoundingClientRect();
         const scale = Math.min(box.width / v.width, box.height / v.height);
         iframe.style.width = v.width + "px";
         iframe.style.height = v.height + "px";
@@ -590,9 +668,9 @@
         frame.classList.add("busy");
         const iframe = document.createElement("iframe");
         iframe.src = `/preview/${v.id}?v=${Date.now()}#t=${at.toFixed(3)}`;
-        iframe.onload = () => fitFrame(iframe, v);
+        iframe.onload = () => fitFrame(iframe, v, frame);
         frame.appendChild(iframe);
-        fitFrame(iframe, v);
+        fitFrame(iframe, v, frame);
         playing = false;
         $("#play").textContent = "Lecture";
         for (const id of ["play", "restart", "refresh", "render"]) $("#" + id).disabled = false;
@@ -992,6 +1070,312 @@
         $("#fx-hint").textContent = e ? e.hint : "";
       }
 
+
+      // ================================================= library page
+
+      let libCollection = "all";   // "all" | "none" | <collectionId>
+      let libPreset = null;        // selected preset id
+      let libPlaying = false;
+
+      function visiblePresets() {
+        if (libCollection === "all") return state.presets;
+        if (libCollection === "none") return state.presets.filter((p) => !p.collectionId);
+        return state.presets.filter((p) => p.collectionId === libCollection);
+      }
+
+      function drawCollections() {
+        const el = $("#collections");
+        el.innerHTML = "";
+        const row = (id, label, count, removable) => {
+          const div = document.createElement("div");
+          div.className = "tree-row" + (libCollection === id ? " on" : "");
+          div.innerHTML = `<span class="grow">${escapeHtml(label)}</span>
+            <span class="count">${count}</span>` +
+            (removable ? `<button class="ren" title="Renommer">✎</button>
+                          <button class="x" title="Supprimer">×</button>` : "");
+          div.onclick = (e) => {
+            if (e.target.closest("button")) return;
+            libCollection = id;
+            const first = visiblePresets()[0];
+            libPreset = first ? first.id : null;
+            drawLibrary();
+          };
+          if (removable) {
+            div.querySelector(".ren").onclick = async () => {
+              const name = prompt("Nom de la collection", label);
+              if (name === null) return;
+              await api(`/api/collections/${id}`, {
+                method: "PATCH",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ name }),
+              });
+              await refresh();
+            };
+            div.querySelector(".x").onclick = async () => {
+              if (!confirm(`Supprimer « ${label} » ? Les préréglages qu'elle contient sont conservés.`)) return;
+              await api(`/api/collections/${id}`, { method: "DELETE" });
+              if (libCollection === id) libCollection = "all";
+              await refresh();
+            };
+          }
+          el.appendChild(div);
+        };
+
+        row("all", "Tous", state.presets.length, false);
+        row("none", "Sans collection", state.presets.filter((p) => !p.collectionId).length, false);
+        for (const c of state.collections) {
+          row(c.id, c.name, state.presets.filter((p) => p.collectionId === c.id).length, true);
+        }
+      }
+
+      function drawLibraryList() {
+        const el = $("#lib-list");
+        el.innerHTML = "";
+        const list = visiblePresets();
+        if (!list.length) {
+          el.innerHTML = '<div class="lib-empty">Aucun préréglage ici.</div>';
+          return;
+        }
+        for (const preset of list) {
+          const def = state.effects.find((e) => e.type === preset.type);
+          const item = document.createElement("div");
+          item.className = "lib-item" + (preset.id === libPreset ? " on" : "");
+          item.innerHTML = `
+            <div class="meta">
+              <div class="nm">★ ${escapeHtml(preset.name)}</div>
+              <div class="base">${escapeHtml(def ? def.label : preset.type)}</div>
+            </div>
+            <button class="x" title="Supprimer">×</button>`;
+          item.onclick = (e) => {
+            if (e.target.closest("button")) return;
+            libPreset = preset.id;
+            drawLibrary();
+            previewPreset();
+          };
+          item.querySelector(".x").onclick = async () => {
+            if (!confirm(`Supprimer « ${preset.name} » ?`)) return;
+            await api(`/api/presets/${preset.id}`, { method: "DELETE" });
+            if (libPreset === preset.id) libPreset = null;
+            await refresh();
+            fillEffectPicker();
+          };
+          el.appendChild(item);
+        }
+      }
+
+      function drawLibraryEditor() {
+        const editor = $("#lib-editor");
+        const preset = state.presets.find((p) => p.id === libPreset);
+        editor.innerHTML = "";
+
+        const disabled = !preset;
+        for (const id of ["lib-dup", "lib-del", "lib-name", "lib-collection", "lib-play"]) {
+          $("#" + id).disabled = disabled;
+        }
+        if (!preset) {
+          $("#lib-name").value = "";
+          return;
+        }
+
+        $("#lib-name").value = preset.name;
+
+        const coll = $("#lib-collection");
+        coll.innerHTML = '<option value="">Sans collection</option>';
+        for (const c of state.collections) {
+          const opt = document.createElement("option");
+          opt.value = c.id;
+          opt.textContent = c.name;
+          if (preset.collectionId === c.id) opt.selected = true;
+          coll.appendChild(opt);
+        }
+
+        const def = state.effects.find((e) => e.type === preset.type);
+        if (!def) return;
+        for (const f of def.schema) {
+          editor.appendChild(field(f, preset.params[f.key], async (value) => {
+            await api(`/api/presets/${preset.id}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ params: { [f.key]: value } }),
+            });
+            await refresh();
+            previewPreset();
+          }, preset.id));
+        }
+      }
+
+      function drawLibrary() {
+        drawCollections();
+        drawLibraryList();
+        drawLibraryEditor();
+
+        const clip = $("#lib-clip");
+        const keep = clip.value;
+        clip.innerHTML = "";
+        const all = state.projects.length ? state.videos : [];
+        for (const v of all) {
+          const opt = document.createElement("option");
+          opt.value = v.id;
+          opt.textContent = v.name;
+          clip.appendChild(opt);
+        }
+        if (!all.length) {
+          clip.innerHTML = '<option value="">aucun clip</option>';
+        } else if ([...clip.options].some((o) => o.value === keep)) {
+          clip.value = keep;
+        }
+      }
+
+      async function previewPreset() {
+        const preset = state.presets.find((p) => p.id === libPreset);
+        const frame = $("#lib-frame");
+        if (!preset) {
+          frame.innerHTML = '<div class="empty">Sélectionne un préréglage.</div>';
+          return;
+        }
+        const videoId = $("#lib-clip").value;
+        const v = state.videos.find((x) => x.id === videoId);
+        if (!v) {
+          frame.innerHTML = '<div class="empty">Ajoute un clip à un projet pour prévisualiser.</div>';
+          return;
+        }
+
+        frame.classList.add("busy");
+        try {
+          const { job } = await api(
+            `/api/presets/${preset.id}/prepare?video=${videoId}`, { method: "POST" });
+          await waitJob(job.id);
+        } catch (error) {
+          frame.classList.remove("busy");
+          return setStatus(error.message, true);
+        }
+
+        const at = showcaseTime(v, { start: 0, duration: null, params: preset.params });
+        frame.innerHTML = "";
+        const iframe = document.createElement("iframe");
+        iframe.src = `/preview-preset/${preset.id}?video=${videoId}&v=${Date.now()}#t=${at.toFixed(3)}`;
+        iframe.onload = () => fitFrame(iframe, v, frame);
+        frame.appendChild(iframe);
+        fitFrame(iframe, v, frame);
+        libPlaying = false;
+        $("#lib-play").textContent = "Lecture";
+        setTimeout(() => frame.classList.remove("busy"), 2500);
+      }
+
+      // ----------------------------------------------------- library wiring
+
+      function fillBasePicker() {
+        const sel = $("#lib-base");
+        const keep = sel.value;
+        sel.innerHTML = "";
+        for (const e of state.effects) {
+          const opt = document.createElement("option");
+          opt.value = e.type;
+          opt.textContent = e.label;
+          sel.appendChild(opt);
+        }
+        if (keep) sel.value = keep;
+      }
+
+      $("#lib-create").onclick = async () => {
+        const type = $("#lib-base").value;
+        const def = state.effects.find((e) => e.type === type);
+        const name = prompt("Nom du préréglage", def ? def.label : "Préréglage");
+        if (name === null) return;
+        const { preset } = await api("/api/presets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            type, name,
+            collectionId: libCollection === "all" || libCollection === "none" ? null : libCollection,
+          }),
+        });
+        libPreset = preset.id;
+        await refresh();
+        fillEffectPicker();
+        previewPreset();
+      };
+
+      $("#lib-name").onchange = async () => {
+        if (!libPreset) return;
+        await api(`/api/presets/${libPreset}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: $("#lib-name").value }),
+        });
+        await refresh();
+        fillEffectPicker();
+      };
+
+      $("#lib-collection").onchange = async () => {
+        if (!libPreset) return;
+        await api(`/api/presets/${libPreset}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ collectionId: $("#lib-collection").value || null }),
+        });
+        await refresh();
+      };
+
+      $("#lib-dup").onclick = async () => {
+        if (!libPreset) return;
+        const { preset } = await api(`/api/presets/${libPreset}/duplicate`, { method: "POST" });
+        libPreset = preset.id;
+        await refresh();
+        fillEffectPicker();
+      };
+
+      $("#lib-del").onclick = async () => {
+        const preset = state.presets.find((p) => p.id === libPreset);
+        if (!preset || !confirm(`Supprimer « ${preset.name} » ?`)) return;
+        await api(`/api/presets/${preset.id}`, { method: "DELETE" });
+        libPreset = null;
+        await refresh();
+        fillEffectPicker();
+        previewPreset();
+      };
+
+      $("#lib-clip").onchange = () => previewPreset();
+
+      $("#lib-play").onclick = () => {
+        libPlaying = !libPlaying;
+        const iframe = $("#lib-frame iframe");
+        if (iframe) iframe.contentWindow.postMessage(libPlaying ? "play" : "pause", "*");
+        $("#lib-play").textContent = libPlaying ? "Pause" : "Lecture";
+      };
+
+      $("#new-collection").onclick = async () => {
+        const name = prompt("Nom de la collection", "Nouvelle collection");
+        if (name === null) return;
+        const { collection } = await api("/api/collections", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        libCollection = collection.id;
+        await refresh();
+      };
+
+      // ------------------------------------------------------------- tabs
+
+      function showView(which) {
+        $("#view-edit").hidden = which !== "edit";
+        $("#view-lib").hidden = which !== "lib";
+        $("#tab-edit").classList.toggle("on", which === "edit");
+        $("#tab-lib").classList.toggle("on", which === "lib");
+        if (which === "lib") {
+          if (!libPreset) libPreset = visiblePresets()[0]?.id || null;
+          drawLibrary();
+          previewPreset();
+        } else {
+          const v = videoById(selected);
+          const iframe = $("#frame iframe");
+          if (v && iframe) fitFrame(iframe, v, $("#frame"));
+        }
+      }
+      $("#tab-edit").onclick = () => showView("edit");
+      $("#tab-lib").onclick = () => showView("lib");
+
       // ------------------------------------------------------------- wiring
 
       async function select(id) {
@@ -1015,6 +1399,7 @@
         if (selected && !videoById(selected)) selected = null;
         drawTree();
         drawPresets();
+        if (!$("#view-lib").hidden) drawLibrary();
         drawLibrary();
         drawStack();
         drawTimeline();
@@ -1128,7 +1513,10 @@
       window.addEventListener("resize", () => {
         const v = videoById(selected);
         const iframe = $("#frame iframe");
-        if (v && iframe) fitFrame(iframe, v);
+        if (v && iframe) fitFrame(iframe, v, $("#frame"));
+        const libIframe = $("#lib-frame iframe");
+        const libVideo = state.videos.find((x) => x.id === $("#lib-clip").value);
+        if (libIframe && libVideo) fitFrame(libIframe, libVideo, $("#lib-frame"));
       });
 
       function escapeHtml(s) {
@@ -1157,6 +1545,7 @@
         }
         await refresh();
         fillEffectPicker();
+        fillBasePicker();
         $("#fx-type").onchange = showEffectHint;
         if (state.videos.length) {
           const first = state.videos.find((v) => v.id === state.activeVideo) || state.videos[0];

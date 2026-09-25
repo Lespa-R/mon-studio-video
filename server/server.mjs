@@ -323,10 +323,34 @@ async function handleApi(req, res, url) {
     }
   }
 
+  // --------------------------------------------------------- collections
+  if (section === "collections") {
+    if (req.method === "POST") {
+      const { name } = await readJson(req);
+      const collection = store.addCollection(name);
+      await saveState();
+      return send(res, 200, { collection });
+    }
+    if (req.method === "PATCH" && id) {
+      const collection = store.collection(id);
+      if (!collection) return send(res, 404, { error: "unknown collection" });
+      const { name } = await readJson(req);
+      if (name) collection.name = String(name).slice(0, 80);
+      await saveState();
+      return send(res, 200, { collection });
+    }
+    if (req.method === "DELETE" && id) {
+      store.removeCollection(id);
+      await saveState();
+      return send(res, 200, { ok: true });
+    }
+  }
+
   // ------------------------------------------------------------- presets
   if (section === "presets") {
-    if (req.method === "POST") {
-      const { name, fromVideo, fromEffect, type, params } = await readJson(req);
+    // `!id` matters: POST /api/presets/:id/prepare must not land here.
+    if (req.method === "POST" && !id) {
+      const { name, fromVideo, fromEffect, type, params, collectionId } = await readJson(req);
       let preset;
       if (fromVideo && fromEffect) {
         const video = store.video(fromVideo);
@@ -336,19 +360,48 @@ async function handleApi(req, res, url) {
           name: name || fx.name || byType(fx.type)?.label,
           type: fx.type,
           params: { ...fx.params },
+          collectionId: collectionId ?? null,
         });
       } else {
         if (!byType(type)) return send(res, 400, { error: `unknown effect ${type}` });
-        preset = store.addPreset({ name, type, params: params || defaultParams(type) });
+        preset = store.addPreset({
+          name, type, params: params || defaultParams(type), collectionId: collectionId ?? null,
+        });
       }
       await saveState();
       return send(res, 200, { preset });
     }
+    if (sub === "duplicate" && req.method === "POST") {
+      const copy = store.duplicatePreset(id);
+      if (!copy) return send(res, 404, { error: "unknown preset" });
+      await saveState();
+      return send(res, 200, { preset: copy });
+    }
+
+    // Make sure the clip used to preview this preset has its matte.
+    if (sub === "prepare" && req.method === "POST") {
+      const preset = store.preset(id);
+      if (!preset) return send(res, 404, { error: "unknown preset" });
+      const video = store.video(url.searchParams.get("video"));
+      if (!video) return send(res, 400, { error: "no clip to preview against" });
+      const job = startJob("preset-prepare", async (j) => {
+        if (byType(preset.type)?.needsMatte) await ensureMatte(video, j);
+        return { ready: true };
+      });
+      return send(res, 200, { job });
+    }
+
     if (req.method === "PATCH" && id) {
       const preset = store.preset(id);
       if (!preset) return send(res, 404, { error: "unknown preset" });
-      const { name } = await readJson(req);
-      if (name) preset.name = String(name).slice(0, 80);
+      const body = await readJson(req);
+      if (body.name !== undefined) {
+        preset.name = String(body.name).trim().slice(0, 80) || preset.name;
+      }
+      if (body.params) preset.params = { ...preset.params, ...body.params };
+      if (body.collectionId !== undefined) {
+        preset.collectionId = store.collection(body.collectionId) ? body.collectionId : null;
+      }
       await saveState();
       return send(res, 200, { preset });
     }
@@ -438,16 +491,10 @@ async function handleApi(req, res, url) {
   send(res, 404, { error: "unknown route" });
 }
 
-// Serve the composition for the in-page preview. A <base> tag makes the
+// Serve a composition for the in-page preview. A <base> tag makes the
 // relative media/ paths resolve, and a tiny player drives the GSAP timeline
 // off the background video's clock so the effects animate in real time.
-async function servePreview(res, id) {
-  const video = findVideo(id);
-  if (!video) return send(res, 404, { error: "unknown video" }, "text/plain");
-
-  const { bg, fg } = mediaNames(video);
-  let html = compose(video, { bgFile: bg, fgFile: fg });
-
+function playable(html) {
   html = html.replace("<head>", `<head>\n    <base href="/">`);
   html = html.replace("</body>", `
     <script>
@@ -521,7 +568,46 @@ async function servePreview(res, id) {
     <\/script>
   </body>`);
 
-  send(res, 200, html, "text/html");
+  return html;
+}
+
+async function servePreview(res, id) {
+  const video = findVideo(id);
+  if (!video) return send(res, 404, { error: "unknown video" }, "text/plain");
+  const { bg, fg } = mediaNames(video);
+  send(res, 200, playable(compose(video, { bgFile: bg, fgFile: fg })), "text/html");
+}
+
+// The library's preview: the clip with this preset as its only effect, so you
+// can tune a look without it fighting whatever else is on the timeline.
+async function servePresetPreview(res, presetId, videoId) {
+  const preset = store.preset(presetId);
+  if (!preset) return send(res, 404, { error: "unknown preset" }, "text/plain");
+
+  const video = findVideo(videoId) || store.activeProject()?.videos[0];
+  if (!video) {
+    return send(res, 200, `<!doctype html><meta charset="utf-8">
+      <body style="margin:0;display:flex;align-items:center;justify-content:center;
+                   height:100vh;background:#0d1017;color:#8b97a8;
+                   font:13px -apple-system,system-ui,sans-serif">
+        Ajoute un clip à un projet pour prévisualiser tes préréglages.
+      </body>`, "text/html");
+  }
+
+  const { bg, fg } = mediaNames(video);
+  const solo = {
+    ...video,
+    effects: [{
+      id: "fx_preset",
+      type: preset.type,
+      name: preset.name,
+      enabled: true,
+      start: 0,
+      duration: null,
+      params: preset.params,
+    }],
+  };
+  send(res, 200, playable(compose(solo, { bgFile: bg, fgFile: fg })), "text/html");
 }
 
 // --------------------------------------------------------------------- main
@@ -533,6 +619,9 @@ async function handler(req, res) {
   try {
     if (p.startsWith("/api/")) return await handleApi(req, res, url);
     if (p.startsWith("/preview/")) return await servePreview(res, p.split("/")[2]);
+    if (p.startsWith("/preview-preset/")) {
+      return await servePresetPreview(res, p.split("/")[2], url.searchParams.get("video"));
+    }
     if (p.startsWith("/media/")) {
       return serveFile(req, res, path.join(MEDIA, path.basename(p)));
     }
