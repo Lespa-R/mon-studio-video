@@ -799,7 +799,7 @@
           body.className = "fx-body";
           // Without a face the text is placed freely whatever "anchor" says
           // (see behind-text), so show the free controls, not the face ones.
-          const faceless = !v.face && def.schema.some((f) => f.key === "anchor");
+          const faceless = !v.face && def.schema.some((f) => f.key === "anchor") && fx.params.anchor !== "follow";
           const shown = faceless ? { ...fx.params, anchor: "free" } : fx.params;
           for (const f of def.schema) {
             if (!fieldApplies(def, f, shown)) continue;
@@ -807,6 +807,20 @@
               patch(v.id, fx.id, { params: { ...extra, [f.key]: value } }), fx.id));
           }
           card.appendChild(body);
+
+          // Following people: say how many the clip has, once tracked.
+          const follows = fx.type === "person-tags" || fx.params.anchor === "follow";
+          if (follows) {
+            const n = v.peopleCount;
+            const w = document.createElement("div");
+            w.className = "hint";
+            const want = fx.params.person && fx.params.person !== "all" ? Number(fx.params.person) : 0;
+            if (n === undefined) w.textContent = "Le suivi des personnes se calcule à l'aperçu (quelques secondes).";
+            else if (!n) { w.className = "hint warn"; w.textContent = "Aucune personne suivie dans ce clip : le texte est placé librement."; }
+            else if (want > n) { w.className = "hint warn"; w.textContent = `Ce clip n'a que ${n} personne${n > 1 ? "s" : ""} suivie${n > 1 ? "s" : ""} : choisis-en une autre.`; }
+            else w.textContent = `${n} personne${n > 1 ? "s" : ""} suivie${n > 1 ? "s" : ""} dans ce clip, numérotée${n > 1 ? "s" : ""} de gauche à droite.`;
+            card.appendChild(w);
+          }
 
           // Anchored on the face, but none was found (seen from behind, far
           // away): the text is placed freely instead — say so.
@@ -1113,7 +1127,10 @@
         $("#prog").hidden = false;
         try {
           const { job } = await api(`/api/videos/${v.id}/prepare`, { method: "POST" });
-          await waitJob(job.id);
+          const done = await waitJob(job.id);
+          // The first preview of a following effect tracks the people: the
+          // cards then say how many were found.
+          if (done.result && done.result.peopleCount != null && done.result.peopleCount !== v.peopleCount) await refresh();
         } catch (error) {
           setBusy(false);
           $("#prog").hidden = true;
@@ -1715,7 +1732,16 @@
           const cdx = dx / k;
           const cdy = dy / k;
           let params;
-          if (def.drag.stage) {
+          const following = def.drag.offset || (def.drag.follow && fx.params[def.drag.key] === def.drag.follow);
+          if (def.drag.stage && following) {
+            // It follows someone: the move becomes an offset from that
+            // person (% of the source frame), so it keeps following.
+            const nudge = (key, d, size) => {
+              const v = Number(fx.params[key]) || 0;
+              return Math.round(Math.min(50, Math.max(-50, v + (d / sk / size) * 100)) * 2) / 2;
+            };
+            params = { ox: nudge("ox", cdx, stage.offsetWidth), oy: nudge("oy", cdy, stage.offsetHeight) };
+          } else if (def.drag.stage) {
             // Added to where the line is anchored, in source pixels.
             const ax = Number(root.dataset.anchorX);
             const ay = Number(root.dataset.anchorY);

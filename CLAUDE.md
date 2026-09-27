@@ -41,6 +41,8 @@ lib/effects.mjs        text effects, TEXT_ANIMS + registry  ← add effects here
 lib/effects-anim.mjs   animated elements (canvas space)     ← or here
 lib/effects-image.mjs  image treatments (filters, grain…)   ← or here
 lib/effects-captions.mjs the "Sous-titres" effect (draws video.captions)
+lib/effects-people.mjs name tags that follow each tracked person
+lib/tracking.mjs       detections → one smooth track per person; follow paths (pure)
 lib/captions.mjs       subtitles: words → lines, edits, SRT in/out, chunking (pure)
 lib/brand.mjs          brand kits: colour tokens, fonts, logo (pure)
 lib/compose.mjs        clip + effects + format → HyperFrames HTML (pure)
@@ -50,7 +52,8 @@ lib/store.mjs          studio.json (v6): folders → projects (+format, brandId)
 lib/media.mjs          ffprobe, face detection, person matte (async)
 lib/guard.mjs          Host/Origin guard
 tools/*.swift          Vision helpers: facedet (face box), personmatte (cut-out → RGBA);
-                       transcribe.swift → tools/Transcribe.app (on-device speech → timed words)
+                       transcribe.swift → tools/Transcribe.app (on-device speech → timed words);
+                       persontrack (bodies + faces, several people, N samples/s)
 bin/behind.mjs         one-shot CLI
 test/*.test.mjs        node --test
 docs/ARCHITECTURE.md   the long-form technical reference
@@ -123,6 +126,13 @@ Rules that keep compositions correct:
   the grabbable box(es) with `data-drag="${id}"`, give the position select a
   `"free"` option and the `freeXY(key)` fields, and centre on
   `freeSpot(p)` in free mode (see `lib/effects-anim.mjs`).
+- **Following people.** An effect that needs tracks declares
+  `needsTracks(fx) → bool`; the server then runs `ensureTracks()` (cached in
+  `media/<id>-people.json`) before previewing or rendering, and `build()` finds
+  them in `video.people`. Use `followPath()` + `simplifyPath()` +
+  `pathTimeline()` from `lib/tracking.mjs` on a *mover* wrapper, and animate the
+  element inside it. `drag: { offset: true }` (or `follow: "<anchor value>"`)
+  makes a drag write `ox` / `oy` offsets instead of a fixed position.
 - **Placement vs animation transforms**: put a `translate(-50%)` centring on a
   wrapper and tween the child — a GSAP `x`/`y` tween overwrites the transform.
 

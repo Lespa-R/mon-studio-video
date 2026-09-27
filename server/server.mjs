@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 
 import { catalogue, defaultParams, byType, isTimed } from "../lib/effects.mjs";
 import { Store, newId } from "../lib/store.mjs";
-import { compose, needsMatte } from "../lib/compose.mjs";
+import { compose, needsMatte, needsTracking } from "../lib/compose.mjs";
+import { buildTracks } from "../lib/tracking.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
@@ -65,8 +66,50 @@ function startJob(label, worker) {
 // --------------------------------------------------------------- pipeline
 
 function mediaNames(video) {
-  return { bg: `${video.id}-bg${video.ext}`, fg: `${video.id}-fg.webm` };
+  return { bg: `${video.id}-bg${video.ext}`, fg: `${video.id}-fg.webm`, people: `${video.id}-people.json` };
 }
+
+// ---------------------------------------------------------------- people
+
+// Tracks of the people in each clip, built on demand (an effect follows
+// someone) and kept next to the clip as media/<id>-people.json — the raw
+// detections, so the tracks can be rebuilt if lib/tracking.mjs changes.
+const peopleCache = new Map();    // videoId -> tracks
+const peopleInFlight = new Map(); // videoId -> promise
+
+async function ensureTracks(video, job) {
+  if (peopleCache.has(video.id)) return peopleCache.get(video.id);
+  if (peopleInFlight.has(video.id)) return peopleInFlight.get(video.id);
+  const file = path.join(MEDIA, mediaNames(video).people);
+  const promise = (async () => {
+    let raw;
+    try {
+      raw = JSON.parse(await fsp.readFile(file, "utf8"));
+    } catch {
+      if (job) { job.message = "Suivi des personnes…"; job.progress = 0; }
+      raw = await media.detectPeople(path.join(MEDIA, mediaNames(video).bg), {
+        // Plenty for walking speed; long clips are sampled less often.
+        fps: video.duration > 60 ? 5 : 8,
+        onProgress: (p) => { if (job) job.progress = p; },
+      });
+      await writeAtomic(file, JSON.stringify(raw));
+    }
+    const people = buildTracks(raw);
+    peopleCache.set(video.id, people);
+    // Remembered on the clip so the UI can say how many people it follows.
+    const live = findVideo(video.id);
+    if (live && live.peopleCount !== people.tracks.length) {
+      live.peopleCount = people.tracks.length;
+      await saveState();
+    }
+    return people;
+  })().finally(() => peopleInFlight.delete(video.id));
+  peopleInFlight.set(video.id, promise);
+  return promise;
+}
+
+// The clip as effects see it: with its people, when they have been tracked.
+const withPeople = (video) => ({ ...video, people: peopleCache.get(video.id) || null });
 
 // One cut-out per clip at a time. Two previews landing close together (the
 // montage and the library, or an add followed by a tweak) used to start two
@@ -159,6 +202,7 @@ async function runRender({ name, html, mattes }, job) {
     if (!live) throw new Error("un clip de ce rendu a été supprimé");
     await ensureMatte(live, job);
   }
+  if (typeof html === "function") html = await html(job);
 
   // Root level, so the composition's media/ paths resolve unchanged.
   const composition = `render-${job.id}.html`;
@@ -373,9 +417,11 @@ async function addAsset(req, res) {
 }
 
 async function dropMedia(video) {
-  const { bg, fg } = mediaNames(video);
+  const { bg, fg, people } = mediaNames(video);
   await fsp.rm(path.join(MEDIA, bg), { force: true });
   await fsp.rm(path.join(MEDIA, fg), { force: true });
+  await fsp.rm(path.join(MEDIA, people), { force: true });
+  peopleCache.delete(video.id);
 }
 
 async function removeVideo(res, id) {
@@ -575,6 +621,7 @@ async function handleApi(req, res, url) {
       const video = store.video(url.searchParams.get("video"));
       if (!video) return send(res, 400, { error: "no clip to preview against" });
       const job = startJob("preset-prepare", async (j) => {
+        if (byType(preset.type)?.needsTracks?.({ params: preset.params })) await ensureTracks(video, j);
         if (byType(preset.type)?.needsMatte) await ensureMatte(video, j);
         return { ready: true };
       });
@@ -782,21 +829,30 @@ async function handleApi(req, res, url) {
     // The preview composes in memory; all it needs on disk is the cut-out.
     if (sub === "prepare" && req.method === "POST") {
       const job = startJob("prepare", async (j) => {
+        if (needsTracking(video)) await ensureTracks(video, j);
         if (needsMatte(video)) await ensureMatte(video, j);
         store.state.activeVideo = video.id;
         await saveState();
-        return { ready: true };
+        return { ready: true, peopleCount: video.peopleCount ?? null };
       });
       return send(res, 200, { job });
     }
 
     if (sub === "render" && req.method === "POST") {
+      // What the user set up at the click is what renders: the clip, its
+      // format and brand are copied now. Only the people tracks — measured
+      // from the footage, not chosen — may be computed later, in the job.
+      const snapshot = structuredClone(video);
+      const format = formatOf(video.id);
+      const brand = brandOf(video.id);
+      const html = needsTracking(snapshot)
+        ? async (job) => {
+          await ensureTracks(video, job);
+          return compose(withPeople(snapshot), filesOf(snapshot), format, brand);
+        }
+        : compose(withPeople(snapshot), filesOf(snapshot), format, brand);
       return send(res, 200, {
-        job: queueRender({
-          name: video.name,
-          html: compose(video, filesOf(video), formatOf(video.id), brandOf(video.id)),
-          mattes: needsMatte(video) ? [video] : [],
-        }),
+        job: queueRender({ name: video.name, html, mattes: needsMatte(video) ? [video] : [] }),
       });
     }
   }
@@ -922,7 +978,7 @@ function playable(html) {
 async function servePreview(res, id) {
   const video = findVideo(id);
   if (!video) return send(res, 404, { error: "unknown video" }, "text/plain");
-  send(res, 200, playable(compose(video, filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
+  send(res, 200, playable(compose(withPeople(video), filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
 }
 
 // The library's preview: the clip with this preset as its only effect, so you
@@ -953,7 +1009,7 @@ async function servePresetPreview(res, presetId, videoId) {
       params: preset.params,
     }],
   };
-  send(res, 200, playable(compose(solo, filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
+  send(res, 200, playable(compose(withPeople(solo), filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
 }
 
 // ---------------------------------------------------------------- guard

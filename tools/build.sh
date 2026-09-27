@@ -2,7 +2,7 @@
 # Compiles the macOS helpers. Re-run after editing the .swift files.
 set -euo pipefail
 cd "$(dirname "$0")"
-for t in facedet personmatte; do
+for t in facedet personmatte persontrack; do
   if [ ! -x "$t" ] || [ "$t.swift" -nt "$t" ]; then
     echo "building $t..."
     swiftc -O "$t.swift" -o "$t"

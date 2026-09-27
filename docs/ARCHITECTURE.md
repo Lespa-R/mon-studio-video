@@ -194,6 +194,28 @@ Text effects take an **Animation** param (`TEXT_ANIMS` in `lib/effects.mjs`):
 each style animates a unit — letters (`-ch`), words (`-wd`) or the whole line
 (a `clip-path` wipe) — and `textTimeline()` compresses it to fit the window.
 
+## Following people (`lib/tracking.mjs`, `tools/persontrack.swift`)
+
+`persontrack` decodes the clip once and, 8 times a second (5 past a minute),
+runs Vision's human-rectangle detector twice — upper bodies and whole bodies —
+plus the face detector. `buildTracks()` links detections frame to frame
+(greedy matching on overlap and nearness, a track survives 1 s unseen), drops
+flickers, resamples each track on a 0.1 s grid and smooths it. A track follows
+the face when it is seen at least half the time (steadier than a body box that
+grows with the arms), else the body. Tracks are numbered left to right.
+
+Effects follow a track through a **mover**: a wrapper whose `x`/`y` GSAP
+tweens along the path (simplified with Ramer–Douglas–Peucker to ~2 px), while
+the element inside keeps its own animation. `behind-text` in "follow" mode
+stays under the cut-out — the segmentation matte covers every person — and the
+name tags (`person-tags`) sit above the footage. The server computes tracks on
+the first preview that needs them and caches the raw detections in
+`media/<id>-people.json`; renders compose after tracking, from a snapshot of
+the clip taken at the click.
+
+Limits: two people crossing can swap identities (greedy association, no
+appearance model); smoothing lags very fast moves by ~0.2 s.
+
 ## Subtitles (`lib/captions.mjs`, `lib/effects-captions.mjs`)
 
 `video.captions = { lang, source, cues: [{ id, start, end, text, words: [{ w, s, e }] }] }`.

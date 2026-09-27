@@ -22,3 +22,4 @@ render-*.html
 # port actually used by the running studio
 .studio-port
 tools/Transcribe.app/
+tools/persontrack

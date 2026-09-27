@@ -111,6 +111,22 @@ Un simple clic sur le cadre ouvre sa carte de réglages, **Échap** annule un
 glisser en cours. La flèche se déplace avec sa cible ; la barre de progression
 reste en haut ou en bas.
 
+**Texte derrière des personnes qui bougent** : dans **Texte derrière moi**,
+choisis **Placement : Suit une personne**. Le studio repère les personnes du
+clip (sur ton Mac, au premier aperçu) et les numérote **de gauche à droite** ;
+choisis **Personne 1, 2, 3…** ou **Tout le groupe**. Le texte les accompagne
+quand elles se déplacent, toujours derrière elles — la découpe les détoure
+toutes. **Hauteur sur la personne** va de la tête (0) aux pieds (1) ; glisser
+le texte sur l'aperçu règle son décalage par rapport à la personne. La carte
+indique combien de personnes ont été trouvées.
+
+**Étiquettes des personnes** accroche un nom (et une fonction) à chaque
+personne — « Alice / Bruno / Chloé », dans l'ordre de gauche à droite — au-dessus
+de la tête, sur le buste ou sous la personne, et les fait suivre.
+
+> Si deux personnes se croisent, le suivi peut les intervertir ; coupe alors
+> l'effet en deux sur la timeline, ou choisis « Tout le groupe ».
+
 **Texte derrière une personne sans visage visible** (de dos, de loin, de
 profil) : la découpe détecte la silhouette, pas le visage. Sur un clip où aucun
 visage n'est trouvé, **Texte derrière moi** se place librement : fais-le glisser
