@@ -183,6 +183,19 @@ s'applique aussi au décor.
 > Les contours très fins (cheveux) peuvent garder un léger liseré de la couleur
 > de ta pièce, visible surtout en gros plan sur un fond très différent.
 
+### Rogner le clip (couper le début ou la fin)
+
+**✂ Rogner**, sous l'aperçu, ouvre ta vidéo d'origine : fais glisser les deux
+poignées bleues (ou place la lecture et clique **[ Début ici** / **Fin ici ]**,
+ou tape les temps), vérifie avec **Lire la sélection**, puis **Rogner**.
+
+- **L'original est conservé** : tu peux rouvrir la fenêtre pour rallonger, ou
+  cliquer **Vidéo entière** pour tout annuler.
+- Les **effets et sous-titres suivent la coupe**. Un effet placé dans une partie
+  coupée est ramené au bord (le message le signale) ; les lignes de sous-titres
+  coupées sont mises de côté — si tu rallonges, tout revient à sa place.
+- La découpe du fond et le suivi des personnes se recalculent au prochain aperçu.
+
 ### 3. Placer les effets dans le temps
 
 Sous l'aperçu, la **timeline** montre une barre par effet : **fais-la glisser**

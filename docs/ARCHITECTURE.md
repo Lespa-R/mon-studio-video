@@ -194,6 +194,23 @@ Text effects take an **Animation** param (`TEXT_ANIMS` in `lib/effects.mjs`):
 each style animates a unit — letters (`-ch`), words (`-wd`) or the whole line
 (a `clip-path` wipe) — and `textTimeline()` compresses it to fit the window.
 
+## Trimming (`lib/trim.mjs`, `POST /api/videos/:id/trim`)
+
+A trim keeps `[start, end]` of the original. The first one renames the clip's
+file to `media/<id>-orig<ext>`; each trim then re-encodes that part into
+`media/<id>-bg.mp4` (H.264, CRF 16, frame-accurate). Resetting renames the
+original back. So the rest of the studio never learns about trimming: the clip
+is simply shorter.
+
+`shiftForTrim()` moves effects and subtitle lines by the change of start.
+Whole-clip effects (start 0, to the end) stay whole-clip. An effect pushed out
+of the kept part is pulled to its edge and remembers where it was
+(`trimmedFrom`, in original time, with the position it was given); a line cut
+off goes to `captions.offcuts`, a line cut in half keeps `full`. Widening the
+trim restores them, unless they were edited since. The cut-out, the people
+tracks and the face box are dropped and recomputed. A failed trim puts the
+previous working file back.
+
 ## Following people (`lib/tracking.mjs`, `tools/persontrack.swift`)
 
 `persontrack` decodes the clip once and, 8 times a second (5 past a minute),

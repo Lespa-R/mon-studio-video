@@ -43,6 +43,7 @@ lib/effects-image.mjs  image treatments (filters, grain…)   ← or here
 lib/effects-captions.mjs the "Sous-titres" effect (draws video.captions)
 lib/effects-people.mjs name tags that follow each tracked person
 lib/tracking.mjs       detections → one smooth track per person; follow paths (pure)
+lib/trim.mjs           trimming: shift effects / subtitles when the cut moves (pure)
 lib/captions.mjs       subtitles: words → lines, edits, SRT in/out, chunking (pure)
 lib/brand.mjs          brand kits: colour tokens, fonts, logo (pure)
 lib/compose.mjs        clip + effects + format → HyperFrames HTML (pure)
@@ -176,6 +177,13 @@ canvas model.
   "no", only the user can switch it back on in System Settings › Privacy &
   Security › Speech Recognition — never touch that yourself. Rebuilding the
   app changes its signature and may re-prompt.
+
+- **Trimming rewrites the working file, not the model.** `POST …/trim` keeps
+  the original as `media/<id>-orig<ext>` (`video.trim = { start, end, source,
+  ext }`) and cuts a new `<id>-bg.mp4`; everything else keeps working in the
+  clip's own time. Effects/lines pushed out by a cut remember their place
+  (`fx.trimmedFrom`, `captions.offcuts`, `cue.full`) so widening restores them.
+  The matte, people tracks and face are recomputed after a trim.
 
 ## Decisions — do not revisit without being asked
 

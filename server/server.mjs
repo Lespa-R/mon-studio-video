@@ -13,6 +13,7 @@ import { catalogue, defaultParams, byType, isTimed } from "../lib/effects.mjs";
 import { Store, newId } from "../lib/store.mjs";
 import { compose, needsMatte, needsTracking } from "../lib/compose.mjs";
 import { buildTracks } from "../lib/tracking.mjs";
+import { normaliseTrim, shiftForTrim } from "../lib/trim.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
@@ -66,7 +67,13 @@ function startJob(label, worker) {
 // --------------------------------------------------------------- pipeline
 
 function mediaNames(video) {
-  return { bg: `${video.id}-bg${video.ext}`, fg: `${video.id}-fg.webm`, people: `${video.id}-people.json` };
+  return {
+    bg: `${video.id}-bg${video.ext}`,
+    fg: `${video.id}-fg.webm`,
+    people: `${video.id}-people.json`,
+    // The untouched original, kept once the clip has been trimmed.
+    orig: video.trim ? `${video.id}-orig${video.trim.ext}` : null,
+  };
 }
 
 // ---------------------------------------------------------------- people
@@ -116,6 +123,7 @@ const withPeople = (video) => ({ ...video, people: peopleCache.get(video.id) || 
 // encoders writing the same WebM. Late callers now join the build already in
 // flight and see its progress.
 const mattesInFlight = new Map(); // videoId -> { promise, jobs: Set }
+const trimsInFlight = new Set();   // videoIds being cut
 
 async function ensureMatte(video, job) {
   const { bg, fg } = mediaNames(video);
@@ -417,7 +425,8 @@ async function addAsset(req, res) {
 }
 
 async function dropMedia(video) {
-  const { bg, fg, people } = mediaNames(video);
+  const { bg, fg, people, orig } = mediaNames(video);
+  if (orig) await fsp.rm(path.join(MEDIA, orig), { force: true });
   await fsp.rm(path.join(MEDIA, bg), { force: true });
   await fsp.rm(path.join(MEDIA, fg), { force: true });
   await fsp.rm(path.join(MEDIA, people), { force: true });
@@ -743,6 +752,95 @@ async function handleApi(req, res, url) {
       }
     }
 
+    // trim ------------------------------------------------------------------
+    // Keep [start, end] of the original. The original stays on disk, so the
+    // cut can be moved or undone; effects and subtitles are shifted to match.
+    if (sub === "trim" && req.method === "POST") {
+      const body = await readJson(req);
+      const sourceDuration = video.trim ? video.trim.source : video.duration;
+      const from = video.trim ? { start: video.trim.start, end: video.trim.end } : { start: 0, end: video.duration };
+      const to = body.reset ? { start: 0, end: sourceDuration } : normaliseTrim(body, sourceDuration);
+      if (Math.abs(to.start - from.start) < 0.01 && Math.abs(to.end - from.end) < 0.01) {
+        return send(res, 200, { job: null, unchanged: true });
+      }
+      if (mattesInFlight.has(video.id) || trimsInFlight.has(video.id)) {
+        return send(res, 409, { error: "Ce clip est en cours de traitement : réessaie dans un instant." });
+      }
+      trimsInFlight.add(video.id);
+      const job = startJob("trim", async (j) => {
+        try {
+          j.message = "Découpe de la vidéo…";
+          const whole = to.start < 0.01 && to.end > sourceDuration - 0.01;
+          const old = mediaNames(video);
+          // First trim: the current file becomes the kept original.
+          if (!video.trim) {
+            video.trim = { start: 0, end: video.duration, source: video.duration, ext: video.ext };
+            await fsp.rename(path.join(MEDIA, old.bg), path.join(MEDIA, mediaNames(video).orig));
+          } else {
+            await fsp.rm(path.join(MEDIA, old.bg), { force: true });
+          }
+          const origFile = path.join(MEDIA, mediaNames(video).orig);
+
+          let ext;
+          if (whole) {
+            // Back to the whole clip: the original simply takes its place again.
+            ext = video.trim.ext;
+            await fsp.rename(origFile, path.join(MEDIA, `${video.id}-bg${ext}`));
+          } else {
+            ext = ".mp4";
+            await media.cutClip(origFile, path.join(MEDIA, `${video.id}-bg${ext}`), {
+              start: to.start, duration: to.end - to.start,
+              onProgress: (p) => { j.progress = p * 0.8; },
+            });
+          }
+
+          const info = await media.probe(path.join(MEDIA, `${video.id}-bg${ext}`));
+          const shifted = shiftForTrim(video, from, { start: to.start, end: to.start + info.duration });
+          video.effects = shifted.effects;
+          video.captions = shifted.captions;
+          video.ext = ext;
+          video.duration = info.duration;
+          video.hasAudio = info.hasAudio;
+          video.trim = whole ? undefined : { ...video.trim, start: to.start, end: to.end };
+          if (!video.trim) delete video.trim;
+
+          // Everything measured on the old frames is stale: the cut-out, the
+          // people tracks, the face (it may only appear in the part cut off).
+          await fsp.rm(path.join(MEDIA, old.fg), { force: true });
+          delete video.matteSignature;
+          await fsp.rm(path.join(MEDIA, old.people), { force: true });
+          peopleCache.delete(video.id);
+          delete video.peopleCount;
+          j.message = "Détection du visage…";
+          j.progress = 0.9;
+          try { video.face = await media.detectFace(path.join(MEDIA, `${video.id}-bg${ext}`), 24); } catch { video.face = null; }
+
+          await saveState();
+          return { duration: video.duration, clamped: shifted.clamped, dropped: shifted.dropped, whole };
+        } catch (error) {
+          // Never leave the clip without a working file: put back what was
+          // there before this trim (the original is still on disk).
+          const bgPath = path.join(MEDIA, mediaNames(video).bg);
+          if (!fs.existsSync(bgPath) && video.trim) {
+            const origFile = path.join(MEDIA, mediaNames(video).orig);
+            try {
+              if (from.start < 0.01 && from.end > sourceDuration - 0.01) {
+                await fsp.rename(origFile, bgPath);
+                delete video.trim;
+              } else {
+                await media.cutClip(origFile, bgPath, { start: from.start, duration: from.end - from.start });
+              }
+              await saveState();
+            } catch { /* reported below */ }
+          }
+          throw error;
+        } finally {
+          trimsInFlight.delete(video.id);
+        }
+      });
+      return send(res, 200, { job });
+    }
+
     // subtitles -------------------------------------------------------------
     // The lines belong to the clip; the "captions" effect draws them.
     if (sub === "captions.srt" && req.method === "GET") {
@@ -812,6 +910,8 @@ async function handleApi(req, res, url) {
           lang: LANGUAGES.some((l) => l.value === body.lang) ? body.lang : video.captions?.lang || "fr-FR",
           source: video.captions?.source || "manual",
           cues,
+          // Lines set aside by a trim, restored if it is widened again.
+          ...(video.captions?.offcuts?.length ? { offcuts: video.captions.offcuts } : {}),
         };
         const added = body.ensureEffect ? ensureEffect() : false;
         await saveState();
