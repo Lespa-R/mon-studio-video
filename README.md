@@ -196,6 +196,12 @@ ou tape les temps), vérifie avec **Lire la sélection**, puis **Rogner**.
   coupées sont mises de côté — si tu rallonges, tout revient à sa place.
 - La découpe du fond et le suivi des personnes se recalculent au prochain aperçu.
 
+### Agrandir l'aperçu
+
+Les bords des colonnes de gauche et de droite, et la ligne au-dessus de la
+timeline, se **font glisser** : réduis les colonnes pour un aperçu plus grand.
+Double-clic sur un bord : taille par défaut. La disposition est mémorisée.
+
 ### 3. Placer les effets dans le temps
 
 Sous l'aperçu, la **timeline** montre une barre par effet : **fais-la glisser**

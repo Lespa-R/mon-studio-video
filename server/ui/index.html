@@ -38,7 +38,20 @@
       header nav button.on { background: var(--panel-2); border-color: var(--line); color: var(--text); }
 
       main { flex: 1; display: grid; grid-template-columns: 260px 1fr 340px; min-height: 0; }
-      main[hidden] { display: none; }
+      /* !important: a view's own display (main.storage is display:block) has
+         the same specificity and would otherwise win, leaving a hidden page
+         on screen that took half the height from the montage. */
+      main[hidden] { display: none !important; }
+      /* The montage's side columns and timeline are resizable (splitters). */
+      #view-edit { position: relative; grid-template-columns: var(--left, 260px) minmax(320px, 1fr) var(--right, 340px); }
+      .vsplit { position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -4px; cursor: col-resize; z-index: 20; }
+      .vsplit::after, .hsplit::after { content: ""; position: absolute; background: var(--accent); opacity: 0; transition: opacity .12s; border-radius: 2px; }
+      .vsplit::after { left: 3px; width: 3px; top: 0; bottom: 0; }
+      .vsplit:hover::after, .vsplit.dragging::after, .hsplit:hover::after, .hsplit.dragging::after { opacity: .8; }
+      .hsplit { position: relative; flex: 0 0 9px; margin: -6px 0 -3px; cursor: row-resize; z-index: 5; }
+      .hsplit::after { top: 3px; height: 3px; left: 30%; right: 30%; }
+      body.resizing, body.resizing * { cursor: inherit !important; user-select: none !important; }
+      body.resizing iframe { pointer-events: none; }
       main.lib { grid-template-columns: 210px 280px 1fr; }
 
       /* library page -------------------------------------------------- */
@@ -264,7 +277,7 @@
       .tl {
         position: relative; background: var(--panel); border: 1px solid var(--line);
         border-radius: var(--radius); padding: 8px 12px 10px; flex: 0 0 auto;
-        max-height: 180px; overflow-y: auto; user-select: none;
+        max-height: var(--tl, 180px); overflow-y: auto; user-select: none;
       }
       .tl-row { display: grid; grid-template-columns: 118px 1fr; align-items: center; gap: 10px; height: 26px; }
       .tl-row + .tl-row { margin-top: 3px; }
@@ -486,6 +499,8 @@
     </header>
 
     <main id="view-edit">
+      <div class="vsplit" id="split-left" title="Glisse pour élargir · double-clic : taille par défaut"></div>
+      <div class="vsplit" id="split-right" title="Glisse pour élargir · double-clic : taille par défaut"></div>
       <section class="col">
         <h2>Projets</h2>
         <div class="tree" id="tree"></div>
@@ -517,6 +532,7 @@
           <div class="frame" id="frame">
             <div class="empty">Ajoute une vidéo pour commencer.</div>
           </div>
+          <div class="hsplit" id="tl-split" title="Glisse pour agrandir l'aperçu ou la timeline · double-clic : taille par défaut"></div>
           <div class="tl" id="tl" hidden>
             <div id="tl-body"></div>
             <div class="tl-head" id="tl-head"></div>
@@ -2798,6 +2814,8 @@
         } else {
           const v = videoById(selected);
           const iframe = $("#frame iframe");
+          // The splitters are placed from widths measured while visible.
+          requestAnimationFrame(applyLayout);
           if (v && brandDirty) { brandDirty = false; preview(); }
           else if (v && iframe) fitFrame(iframe, v, $("#frame"));
         }
@@ -3409,7 +3427,68 @@
         if (e.key === "Home" && !typing) post({ type: "seek", t: 0 });
       });
 
+      // ------------------------------------------------ resizable layout
+
+      // Left column, right column and timeline height, dragged by their
+      // splitters and remembered in this browser.
+      const LAYOUT_DEFAULT = { left: 260, right: 340, tl: 180 };
+      let layout = { ...LAYOUT_DEFAULT };
+      try { layout = { ...layout, ...JSON.parse(localStorage.getItem("studio.layout") || "{}") }; } catch { /* private mode */ }
+
+      function applyLayout() {
+        const edit = $("#view-edit");
+        const total = edit.clientWidth || innerWidth;
+        // Always leave the preview column room to breathe.
+        layout.left = Math.round(Math.min(Math.max(layout.left, 170), total - layout.right - 320));
+        layout.right = Math.round(Math.min(Math.max(layout.right, 300), total - layout.left - 320));
+        layout.tl = Math.round(Math.min(Math.max(layout.tl, 60), innerHeight * 0.6));
+        edit.style.setProperty("--left", layout.left + "px");
+        edit.style.setProperty("--right", layout.right + "px");
+        edit.style.setProperty("--tl", layout.tl + "px");
+        $("#split-left").style.left = layout.left + "px";
+        $("#split-right").style.left = total - layout.right + "px";
+        $("#tl-split").hidden = $("#tl").hidden;
+        const v = videoById(selected);
+        const iframe = $("#frame iframe");
+        if (v && iframe) fitFrame(iframe, v, $("#frame"));
+      }
+      const saveLayout = () => {
+        try { localStorage.setItem("studio.layout", JSON.stringify(layout)); } catch { /* private mode */ }
+      };
+
+      function splitter(el, onMove, reset) {
+        el.addEventListener("pointerdown", (e) => {
+          if (e.button !== 0) return;
+          e.preventDefault();
+          const start = { x: e.clientX, y: e.clientY, ...layout };
+          el.classList.add("dragging");
+          document.body.classList.add("resizing");
+          document.body.style.cursor = getComputedStyle(el).cursor;
+          const move = (ev) => { onMove(ev.clientX - start.x, ev.clientY - start.y, start); applyLayout(); };
+          const up = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+            el.classList.remove("dragging");
+            document.body.classList.remove("resizing");
+            document.body.style.cursor = "";
+            saveLayout();
+          };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        });
+        el.addEventListener("dblclick", () => { reset(); applyLayout(); saveLayout(); });
+      }
+      splitter($("#split-left"), (dx, dy, s) => { layout.left = s.left + dx; }, () => { layout.left = LAYOUT_DEFAULT.left; });
+      splitter($("#split-right"), (dx, dy, s) => { layout.right = s.right - dx; }, () => { layout.right = LAYOUT_DEFAULT.right; });
+      // Dragging up grows the timeline, down grows the preview.
+      splitter($("#tl-split"), (dx, dy, s) => { layout.tl = s.tl - dy; }, () => { layout.tl = LAYOUT_DEFAULT.tl; });
+      // The timeline shows or hides with the clip; keep its splitter in step.
+      new MutationObserver(() => { $("#tl-split").hidden = $("#tl").hidden; })
+        .observe($("#tl"), { attributes: true, attributeFilter: ["hidden"] });
+      applyLayout();
+
       window.addEventListener("resize", () => {
+        applyLayout();
         const v = videoById(selected);
         const iframe = $("#frame iframe");
         if (v && iframe) fitFrame(iframe, v, $("#frame"));

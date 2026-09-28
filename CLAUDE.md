@@ -157,7 +157,9 @@ canvas model.
   `drawLibrary` (clip list) vs `drawEffectLibrary` (library page) — keep them
   distinct.
 - **`display: flex/grid` beats the `hidden` attribute.** Add `[hidden] { display: none }`
-  for any element you toggle.
+  for any element you toggle. A page view is a `<main>`: `main[hidden]` is
+  `!important` because a view with its own `display` (`main.storage`) once
+  stayed on screen, hidden, and halved the montage preview.
 - **Backslashes inside the preview player's template literal are eaten** (`\d`
   becomes `d`). Avoid regexes there.
 - **Screenshots of a playing `<video>` come out black** (or on top of overlays):
