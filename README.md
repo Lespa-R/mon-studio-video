@@ -250,8 +250,9 @@ charte du studio, avec une musique générée calée sur l'image. Format par dé
   italique, `|` = retour à la ligne. **Enregistrer** écrit le storyboard.
 - **Charte** : choisis une charte du studio, elle est copiée dans la promo
   (couleurs, polices, logo).
-- **Capturer le site** (page entière, pour la scène « Le site qui défile »),
-  **Composer la musique**, **Contrôler** (brouillon rapide + planche de 2 images
+- **Capturer le site** (page entière + thème de la vidéo tiré du site : clair
+  ou sombre, dégradés, boutons), **Nouvelle musique** (chaque clic tire une
+  musique propre à cette promo, jamais celle d'une autre), **Contrôler** (brouillon rapide + planche de 2 images
   par scène + bords + niveau sonore), **Rendre la vidéo finale** (encodage
   conforme LinkedIn).
 - **Ajouter au montage** transforme la vidéo rendue en clip du projet ouvert,
@@ -260,6 +261,8 @@ charte du studio, avec une musique générée calée sur l'image. Format par dé
   storyboard reste, tu peux la rendre à nouveau) ; la croix ✕ d'une promo, au
   survol dans la liste, envoie toute la promo à la corbeille. Rien n'est effacé
   pour de bon : tout se récupère depuis la Corbeille du Mac.
+- **Cmd+S** enregistre le storyboard. La page **Stockage** montre aussi la place
+  prise par les promos.
 
 Les promos vivent hors du studio, dans `~/Code/promos/<nom>/` (avec une seule
 installation de Remotion partagée, faite à la première promo). Le studio, lui,

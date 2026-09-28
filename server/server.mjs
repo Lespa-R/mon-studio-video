@@ -277,10 +277,19 @@ const send = (res, code, body, type = "application/json") => {
   res.end(payload);
 };
 
+// JSON bodies are small (effects, storyboards, captions): cap them so a runaway
+// client cannot fill the server's memory.
+const MAX_JSON_BYTES = 8 * 1024 * 1024;
 const readJson = (req) =>
   new Promise((resolve, reject) => {
     let raw = "";
-    req.on("data", (c) => { raw += c; });
+    req.on("data", (c) => {
+      raw += c;
+      if (raw.length > MAX_JSON_BYTES) {
+        reject(new Error("Requête trop volumineuse."));
+        req.destroy();
+      }
+    });
     req.on("end", () => {
       try { resolve(raw ? JSON.parse(raw) : {}); } catch (e) { reject(e); }
     });
@@ -365,7 +374,7 @@ async function scanStorage() {
     const st = await fsp.statfs(ROOT);
     disk = { free: st.bavail * st.bsize, total: st.blocks * st.bsize };
   } catch { /* older Node */ }
-  return { ...result, disk, kinds: KINDS, folder: ROOT };
+  return { ...result, disk, kinds: KINDS, folder: ROOT, promos: await promos.usage() };
 }
 
 const areaDir = { media: MEDIA, renders: RENDERS, root: ROOT, cache: CACHE };

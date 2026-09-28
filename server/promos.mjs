@@ -250,8 +250,11 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
       return send(res, 200, { job: startJob("promo-music", async (job) => {
         const sb = await readStoryboard(slug);
         if (sb.music.mode === "file") return { skipped: "musique fournie (fichier)" };
-        job.message = `Composition de la musique (${sb.music.mood}, ${sb.music.bpm} BPM)…`;
-        const log = await run("python3", [path.join(dir, "music", "compose.py"), dir], { job });
+        // The skill's composer is the reference: a promo made earlier gets its updates.
+        await fsp.copyFile(path.join(SKILL_DIR, "template", "music", "compose.py"), path.join(dir, "music", "compose.py")).catch(() => {});
+        job.message = `Nouvelle musique (${sb.music.mood}, ${sb.music.bpm} BPM)…`;
+        // Each click draws a new variation (new seed, never another promo's).
+        const log = await run("python3", [path.join(dir, "music", "compose.py"), dir, "--new"], { job });
         return { log: log.trim().split("\n").pop() };
       }) });
     }
@@ -326,5 +329,28 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
     return serveFile(req, res, path.join(dirOf(slug), rel));
   }
 
-  return { handleApi, serve, exists: () => fs.existsSync(PROMOS_DIR) };
+  // Disk used by promos (outside the studio folder), for the Storage page.
+  async function usage() {
+    let names = [];
+    try { names = await fsp.readdir(PROMOS_DIR); } catch { return null; }
+    const size = async (p) => {
+      const st = await fsp.lstat(p).catch(() => null);
+      if (!st) return 0;
+      if (!st.isDirectory()) return st.size;
+      let n = 0;
+      for (const e of await fsp.readdir(p)) n += await size(path.join(p, e));
+      return n;
+    };
+    const items = [];
+    let engine = 0;
+    for (const name of names) {
+      if (name === "node_modules") { engine = await size(path.join(PROMOS_DIR, name)); continue; }
+      if (!SLUG.test(name) || !(await exists(path.join(dirOf(name), "storyboard.json")))) continue;
+      items.push({ slug: name, size: await size(dirOf(name)) });
+    }
+    items.sort((a, b) => b.size - a.size);
+    return { folder: PROMOS_DIR, engine, items, total: engine + items.reduce((s, x) => s + x.size, 0) };
+  }
+
+  return { handleApi, serve, usage, exists: () => fs.existsSync(PROMOS_DIR) };
 }

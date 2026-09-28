@@ -61,6 +61,11 @@ test("a file soundtrack keeps its file and offset", () => {
   assert.deepEqual(sb.music, { mode: "file", mood: "electro", bpm: 124, file: "music/a.mp3", offset: 0.37 });
 });
 
+test("the music seed survives normalisation", () => {
+  assert.equal(normaliseStoryboard({ music: { seed: 648032622 } }).music.seed, 648032622);
+  assert.equal(normaliseStoryboard({ music: { seed: "x" } }).music.seed, undefined);
+});
+
 test("timing follows the tempo", () => {
   const t = promoTiming({ music: { bpm: 120 }, scenes: [{ bars: 2 }, { bars: 3 }] });
   assert.equal(t.bar, 2);

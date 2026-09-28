@@ -1732,6 +1732,26 @@
         }
         el.appendChild(rSec);
 
+        // ---- promos (hors du dossier du studio : informatif, suppression dans l'onglet Promos)
+        if (data.promos && (data.promos.items.length || data.promos.engine)) {
+          const pr = data.promos;
+          const pSec = document.createElement("div");
+          pSec.className = "st-sec";
+          pSec.innerHTML = `<h3>Promos Remotion · ${fmtBytes(pr.total)} <span style="text-transform:none;letter-spacing:0;font-weight:400">— hors du studio, dans ${escapeHtml(pr.folder)}</span></h3>`;
+          const table = document.createElement("table");
+          table.className = "st-table";
+          table.innerHTML = "<tr><th>Promo</th><th style=\"text-align:right\">Poids</th></tr>"
+            + pr.items.map((x) => `<tr><td>${escapeHtml(x.slug)}</td><td class="num">${fmtBytes(x.size)}</td></tr>`).join("")
+            + `<tr><td class="sub">Moteur Remotion partagé (node_modules, à garder)</td><td class="num">${fmtBytes(pr.engine)}</td></tr>`;
+          pSec.appendChild(table);
+          const go = document.createElement("button");
+          go.textContent = "Gérer dans l'onglet Promos";
+          go.style.cssText = "margin-top:10px;font-size:12px";
+          go.onclick = () => showView("promos");
+          pSec.appendChild(go);
+          el.appendChild(pSec);
+        }
+
         // ---- assets
         const assets = by("asset");
         const aSec = document.createElement("div");
@@ -3193,6 +3213,10 @@
           const { job } = await api(`/api/promos/${promoSel}/${kind}`, { method: "POST" });
           await waitPromoJob(job.id);
           await openPromo(promoSel);
+          // The list shows « rendue », durations… : keep it in step.
+          const i = promoData.promos.findIndex((p) => p.slug === promoSel);
+          if (i >= 0) promoData.promos[i].lastRender = promo.renders[0] || null;
+          drawPromoList();
           toast(`${label} : terminé.`);
           promoStatus(`${label} : terminé.`);
         } catch (error) {
@@ -3279,7 +3303,7 @@
         save.id = "pr-save";
         save.disabled = !promoDirty || promoBusy;
         btn("Capturer le site", "Capture pleine page + analyse + thème de la vidéo (clair/sombre, dégradés, boutons du site)", () => promoAction("capture", "Capture"));
-        btn("Composer la musique", "Musique générée, calée sur les énergies des scènes", () => promoAction("music", "Musique"));
+        btn("Nouvelle musique", "Tire une nouvelle musique pour cette promo (tonalité, accords, rythmes, timbres), calée sur les énergies des scènes", () => promoAction("music", "Musique"));
         btn("Contrôler", "Brouillon mi-résolution → planche de 2 images par scène + bords + niveau sonore", () => promoAction("check", "Contrôle"), "wide");
         btn("Rendre la vidéo finale", "Rendu Remotion + finition LinkedIn (H.264 yuv420p, AAC 48 kHz)", () => promoAction("render", "Rendu"), "primary wide");
         act.appendChild(grid);
@@ -3370,6 +3394,18 @@
 
         el.appendChild(side);
       }
+
+      // Cmd/Ctrl+S saves the storyboard while the Promos tab is open.
+      document.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "s" && !$("#view-promos").hidden && promoSb) {
+          e.preventDefault();
+          if (promoDirty) savePromo().then(() => toast("Storyboard enregistré.")).catch((err) => toast(err.message));
+        }
+      });
+      // Leaving the page with an unsaved storyboard asks first (the browser's own prompt).
+      window.addEventListener("beforeunload", (e) => {
+        if (promoDirty) { e.preventDefault(); e.returnValue = ""; }
+      });
 
       $("#new-promo").onclick = async () => {
         if (!promoData) return toast("L'onglet Promos n'a pas pu se charger : relance le studio.");

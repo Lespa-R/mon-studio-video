@@ -216,6 +216,9 @@ work (`new_promo.sh`, `capture_site.sh`, `parse_site.py`, `prepare_logo.py`,
   (`fx.trimmedFrom`, `captions.offcuts`, `cue.full`) so widening restores them.
   The matte, people tracks and face are recomputed after a trim.
 
+- **`store.save()` chains writes but never lets one failure poison the
+  chain** (a rejected link used to make every later save fail silently until
+  restart). Keep the `.catch(() => {})` before `.then`.
 - **Storage page deletes only what `classify()` marks deletable**, re-scanned
   server-side at each request (`POST /api/storage/delete` takes names, never
   paths). A new kind of file the studio writes must be recognised there, or it

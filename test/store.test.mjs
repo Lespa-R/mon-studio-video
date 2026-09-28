@@ -186,3 +186,19 @@ test("a brand kit keeps only valid colours and fonts, and its projects survive i
   assert.equal(project.brandId, null);
   assert.equal(store.snapshot([]).brand.name, "Studio (par défaut)");
 });
+
+test("a failed save does not block the following ones", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "store-"));
+  const store = new Store(path.join(dir, "studio.json"));
+  await store.load();
+  // Make the next write fail: the target's temp file is a directory.
+  await fs.mkdir(path.join(dir, "studio.json.tmp"));
+  await assert.rejects(store.save());
+  await fs.rm(path.join(dir, "studio.json.tmp"), { recursive: true });
+  store.state.activeProject = store.state.projects[0].id;
+  store.addFolder("Après l'échec");
+  await store.save();
+  const onDisk = JSON.parse(await fs.readFile(path.join(dir, "studio.json"), "utf8"));
+  assert.ok(onDisk.folders.some((f) => f.name === "Après l'échec"));
+  await fs.rm(dir, { recursive: true });
+});
