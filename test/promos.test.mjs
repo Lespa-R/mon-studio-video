@@ -39,6 +39,12 @@ test("form text round-trips for every field kind", () => {
   assert.equal(toText(lines, ["a", "b"]), "a\nb");
 });
 
+test("wall tiles written as plain names still show in the form", () => {
+  const tiles = sceneType("wall").fields.find((f) => f.key === "tiles");
+  assert.equal(toText(tiles, ["A", { name: "B", image: "projects/b.png" }]), "A\nB | projects/b.png");
+  assert.deepEqual(fromText(tiles, "A\nB | projects/b.png"), [{ name: "A" }, { name: "B", image: "projects/b.png" }]);
+});
+
 test("normalise drops unknown scenes and clamps values", () => {
   const sb = normaliseStoryboard({
     formats: ["4:5", "4:5", "3:2"], music: { mood: "jazz", bpm: 400 },

@@ -168,6 +168,8 @@ work (`new_promo.sh`, `capture_site.sh`, `parse_site.py`, `prepare_logo.py`,
   Scripts run with `PROMO_LOG=info` so Remotion prints `Rendered n/N` progress.
 - `/promos/<slug>/…` serves only a whitelist (`SERVABLE`): sheet, renders,
   screenshot, logo. Slugs are checked against `SLUG`.
+- Deleting (`DELETE /api/promos/:slug`, `DELETE …/renders/:name`) moves to
+  `~/.Trash` (`toTrash`), never `rm`: Robin can put it back.
 - A promo's files are outside `ROOT`, so the Storage page ignores them;
   « Ajouter au montage » copies a render into `media/` as an ordinary clip.
 - Test with `PROMOS_DIR=<temp copy>` (symlink its `node_modules` to

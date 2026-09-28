@@ -256,6 +256,10 @@ charte du studio, avec une musique générée calée sur l'image. Format par dé
   conforme LinkedIn).
 - **Ajouter au montage** transforme la vidéo rendue en clip du projet ouvert,
   pour y ajouter des sous-titres ou des effets.
+- **Supprimer** : le bouton sous une vidéo rendue l'envoie à la corbeille (le
+  storyboard reste, tu peux la rendre à nouveau) ; la croix ✕ d'une promo, au
+  survol dans la liste, envoie toute la promo à la corbeille. Rien n'est effacé
+  pour de bon : tout se récupère depuis la Corbeille du Mac.
 
 Les promos vivent hors du studio, dans `~/Code/promos/<nom>/` (avec une seule
 installation de Remotion partagée, faite à la première promo). Le studio, lui,

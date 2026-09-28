@@ -28,6 +28,25 @@ const SERVABLE = /^(out\/check\/sheet\.png|out\/[\w.-]+\.mp4|site\/shot\.png|pub
 
 const exists = (p) => fsp.access(p).then(() => true, () => false);
 
+// Deleting a promo or a render never destroys anything: it goes to the macOS
+// Trash, where Robin can put it back. rename() is instant on the same volume;
+// a copy + remove covers the rest.
+async function toTrash(target, label) {
+  const trash = path.join(os.homedir(), ".Trash");
+  const ext = path.extname(target);
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-");
+  let dest = path.join(trash, `${label || path.basename(target, ext)} (promo ${stamp})${ext}`);
+  for (let i = 2; await exists(dest); i++) dest = dest.replace(/( \d+)?(\.\w+)?$/, ` ${i}$2`);
+  try {
+    await fsp.rename(target, dest);
+  } catch (error) {
+    if (error.code !== "EXDEV") throw error;
+    await fsp.cp(target, dest, { recursive: true });
+    await fsp.rm(target, { recursive: true, force: true });
+  }
+  return dest;
+}
+
 function run(cmd, args, { cwd, job, onLine } = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args, { cwd, env: ENV });
@@ -144,9 +163,12 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
     }
     const { json, copies } = promoBrand(brand, { fonts: store.state.fonts || [], labels: fontLabels, logo });
     for (const c of copies) await fsp.copyFile(path.join(MEDIA, c.from), path.join(outDir, c.to));
-    // A single-weight display font (Bebas Neue…) set by hand stays set.
+    // A single-weight display font (Bebas Neue…) set by hand stays set, and the
+    // site's theme (light/dark, title gradient, CTA — from site_theme.py) is the
+    // promo's own: changing kits does not wipe it.
     const prev = await readBrand(slug);
     if (prev?.fonts?.title?.weight && prev.fonts.title.family === json.fonts.title.family) json.fonts.title.weight = prev.fonts.title.weight;
+    if (prev?.theme) json.theme = prev.theme;
     await fsp.writeFile(path.join(outDir, "brand.json"), JSON.stringify(json, null, 1));
     return json;
   }
@@ -175,7 +197,7 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
   }
 
   async function handleApi(req, res, parts) {
-    const [, , slug, sub] = parts;
+    const [, , slug, sub, subId] = parts;
 
     if (!slug) {
       if (req.method === "GET") {
@@ -218,7 +240,9 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
         job.message = "Analyse des textes, couleurs et polices…";
         await run("python3", [script("parse_site.py"), path.join(dir, "site"), sb.url], { job });
         await fsp.copyFile(path.join(dir, "site", "shot.png"), path.join(dir, "public", "site.png"));
-        return { ok: true };
+        job.message = "Thème de la vidéo d'après le site (clair/sombre, dégradés, boutons)…";
+        const theme = await run("python3", [script("site_theme.py"), dir], { job });
+        return { theme: theme.trim().split("\n").pop() };
       }) });
     }
 
@@ -266,6 +290,22 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
       const file = path.join(dir, "out", name);
       if (!(await exists(file))) return send(res, 404, { error: "rendu introuvable" });
       return send(res, 200, await importClip(file, name));
+    }
+
+    // Whole promo → Trash (storyboard, captures, music, renders).
+    if (!sub && req.method === "DELETE") {
+      const moved = await toTrash(dir, slug);
+      return send(res, 200, { ok: true, trash: moved });
+    }
+
+    // One rendered video → Trash.
+    if (sub === "renders" && req.method === "DELETE") {
+      const name = decodeURIComponent(subId || "");
+      if (!/^[\w.-]+\.mp4$/.test(name)) return send(res, 400, { error: "fichier invalide" });
+      const file = path.join(dir, "out", name);
+      if (!(await exists(file))) return send(res, 404, { error: "rendu introuvable" });
+      await toTrash(file);
+      return send(res, 200, await detail(slug));
     }
 
     if (sub === "reveal" && req.method === "POST") {

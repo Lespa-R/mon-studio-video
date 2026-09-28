@@ -2885,7 +2885,7 @@
         if (v == null) return "";
         if (f.kind === "lines") return (Array.isArray(v) ? v : [v]).join("\n");
         if (f.kind === "tuples") return v.map((r) => (Array.isArray(r) ? r : [r]).join(" | ")).join("\n");
-        if (f.kind === "rows") return v.map((r) => f.cols.map((c) => r?.[c] ?? "").join(" | ")).join("\n");
+        if (f.kind === "rows") return v.map((r) => (typeof r === "string" ? r : f.cols.map((c) => r?.[c] ?? "").join(" | "))).join("\n");
         return String(v);
       };
       const prFromText = (f, text) => {
@@ -2931,6 +2931,24 @@
           const row = document.createElement("div");
           row.className = "tree-row pr-item" + (p.slug === promoSel ? " on" : "");
           row.innerHTML = `<span class="grow">${escapeHtml(p.title)}<br><span class="meta">${p.error ? "storyboard illisible" : `${p.scenes} scènes · ${fmtSec(p.duration)} · ${escapeHtml(p.formats.join(", "))}`}${p.lastRender ? " · rendue" : ""}</span></span>`;
+          const del = document.createElement("button");
+          del.className = "x";
+          del.textContent = "✕";
+          del.title = "Mettre la promo à la corbeille";
+          del.onclick = async (e) => {
+            e.stopPropagation();
+            if (promoBusy && p.slug === promoSel) return toast("Attends la fin du traitement en cours.");
+            if (!(await askConfirm("Supprimer la promo",
+              `« ${p.title} » part à la Corbeille du Mac : storyboard, captures, musique et vidéos rendues. Tu pourras la récupérer depuis la Corbeille.`,
+              "Mettre à la corbeille"))) return;
+            try {
+              await api(`/api/promos/${p.slug}`, { method: "DELETE" });
+              if (p.slug === promoSel) { promoSel = null; promo = null; promoSb = null; promoDirty = false; }
+              toast(`« ${p.title} » est dans la corbeille.`);
+              await drawPromos();
+            } catch (error) { toast(error.message); }
+          };
+          row.appendChild(del);
           row.onclick = async () => {
             if (p.slug === promoSel) return;
             if (promoDirty && !(await askConfirm("Modifications non enregistrées", "Quitter cette promo sans enregistrer ?", "Quitter"))) return;
@@ -3230,9 +3248,16 @@
           const sw = document.createElement("div");
           sw.className = "brand-swatches";
           sw.style.display = "flex"; sw.style.gap = "6px";
+          const th = promo.brand.theme;
           sw.innerHTML = Object.values(promo.brand.colors).map((c) => `<span style="background:${escapeHtml(c)}"></span>`).join("")
             + `<span style="width:auto;border:0;font-size:11.5px;color:var(--muted)">${escapeHtml(promo.brand.fonts?.title?.family || "")} · ${escapeHtml(promo.brand.fonts?.body?.family || "")}</span>`;
+          const tl = document.createElement("div");
+          tl.className = "pr-help";
+          tl.textContent = th
+            ? `Thème du site : ${th.mode === "light" ? "clair" : "sombre"}${th.titleGradient ? " · titres en dégradé" : ""}${th.cta ? " · boutons du site" : ""}${th.logo ? " · logo adapté" : ""}`
+            : "Pas encore de thème tiré du site : « Capturer le site » le calcule.";
           br.appendChild(sw);
+          br.appendChild(tl);
         }
         side.appendChild(br);
 
@@ -3253,7 +3278,7 @@
         const save = btn(promoDirty ? "Enregistrer *" : "Enregistré", "Écrit storyboard.json", () => savePromo().catch((e) => promoStatus(e.message, true)), "wide");
         save.id = "pr-save";
         save.disabled = !promoDirty || promoBusy;
-        btn("Capturer le site", "Capture pleine page + analyse (pour la scène « Le site qui défile »)", () => promoAction("capture", "Capture"));
+        btn("Capturer le site", "Capture pleine page + analyse + thème de la vidéo (clair/sombre, dégradés, boutons du site)", () => promoAction("capture", "Capture"));
         btn("Composer la musique", "Musique générée, calée sur les énergies des scènes", () => promoAction("music", "Musique"));
         btn("Contrôler", "Brouillon mi-résolution → planche de 2 images par scène + bords + niveau sonore", () => promoAction("check", "Contrôle"), "wide");
         btn("Rendre la vidéo finale", "Rendu Remotion + finition LinkedIn (H.264 yuv420p, AAC 48 kHz)", () => promoAction("render", "Rendu"), "primary wide");
@@ -3289,10 +3314,24 @@
                 toast("Promo ajoutée comme clip au projet ouvert.");
               } catch (error) { toast(error.message); }
             };
+            const drop = document.createElement("button");
+            drop.textContent = "Supprimer";
+            drop.title = "Mettre cette vidéo à la corbeille";
+            drop.onclick = async () => {
+              if (!(await askConfirm("Supprimer la vidéo", `« ${r.name} » part à la Corbeille du Mac (${fmtBytes(r.size)}). Le storyboard est conservé : tu pourras la rendre à nouveau.`, "Mettre à la corbeille"))) return;
+              try {
+                promo = await api(`/api/promos/${promoSel}/renders/${encodeURIComponent(r.name)}`, { method: "DELETE" });
+                const i = promoData.promos.findIndex((x) => x.slug === promoSel);
+                if (i >= 0) promoData.promos[i].lastRender = promo.renders[0] || null;
+                drawPromoList();
+                drawPromoSide();
+                toast("Vidéo mise à la corbeille.");
+              } catch (error) { toast(error.message); }
+            };
             const reveal = document.createElement("button");
             reveal.textContent = "Finder";
             reveal.onclick = () => api(`/api/promos/${promoSel}/reveal`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: r.name }) });
-            row.append(toClip, reveal);
+            row.append(toClip, reveal, drop);
             item.appendChild(row);
             rb.appendChild(item);
           }
