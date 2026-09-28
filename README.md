@@ -236,11 +236,30 @@ Tout est dans le dossier du projet :
 | Chemin | Contenu |
 |---|---|
 | `studio.json` | ta bibliothèque : projets, dossiers, effets, préréglages |
-| `media/` | tes clips importés, leurs découpes, et les images de fond (`asset_….png`) |
+| `media/` | tes clips importés, leurs découpes, suivis, originaux après rognage, images et polices |
 | `renders/` | les MP4 exportés |
 
 Ces trois-là ne partent **pas** sur GitHub (ils sont personnels et lourds).
 Pour sauvegarder ta bibliothèque, copie-les ailleurs.
+
+### Voir et libérer de la place
+
+L'onglet **Stockage** montre ce que pèse le studio, par catégorie et par clip,
+et la place qui reste sur ton disque. En un clic :
+
+- **Vider les caches** — découpes, suivis, fichiers de travail : sans risque,
+  recalculés au prochain aperçu ;
+- **Fichiers orphelins** — restes de clips supprimés ;
+- **Images et polices inutilisées** — plus utilisées par aucun effet, préréglage
+  ni charte ;
+- **Rendre les rognages définitifs** — supprime les originaux gardés (tu ne
+  pourras plus rallonger ces clips) ;
+- **Rendus** — ouvre-les, affiche-les dans le Finder pour les déplacer, ou
+  supprime-les.
+
+Les vidéos des clips ne se suppriment pas ici (supprime le clip dans *Montage*),
+et les fichiers d'origine sur ton Mac ne sont jamais touchés : le studio
+travaille sur ses propres copies.
 
 `studio.json` est protégé : il est écrit de façon atomique, et s'il devenait
 illisible, il serait mis de côté (`studio.corrupt-….json`) et restauré depuis

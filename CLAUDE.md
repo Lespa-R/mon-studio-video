@@ -44,6 +44,7 @@ lib/effects-captions.mjs the "Sous-titres" effect (draws video.captions)
 lib/effects-people.mjs name tags that follow each tracked person
 lib/tracking.mjs       detections → one smooth track per person; follow paths (pure)
 lib/trim.mjs           trimming: shift effects / subtitles when the cut moves (pure)
+lib/storage.mjs        disk usage: sorts every file into a kind, says what may be deleted (pure)
 lib/captions.mjs       subtitles: words → lines, edits, SRT in/out, chunking (pure)
 lib/brand.mjs          brand kits: colour tokens, fonts, logo (pure)
 lib/compose.mjs        clip + effects + format → HyperFrames HTML (pure)
@@ -184,6 +185,11 @@ canvas model.
   clip's own time. Effects/lines pushed out by a cut remember their place
   (`fx.trimmedFrom`, `captions.offcuts`, `cue.full`) so widening restores them.
   The matte, people tracks and face are recomputed after a trim.
+
+- **Storage page deletes only what `classify()` marks deletable**, re-scanned
+  server-side at each request (`POST /api/storage/delete` takes names, never
+  paths). A new kind of file the studio writes must be recognised there, or it
+  shows up as an orphan the user can delete.
 
 ## Decisions — do not revisit without being asked
 

@@ -14,6 +14,7 @@ import { Store, newId } from "../lib/store.mjs";
 import { compose, needsMatte, needsTracking } from "../lib/compose.mjs";
 import { buildTracks } from "../lib/tracking.mjs";
 import { normaliseTrim, shiftForTrim } from "../lib/trim.mjs";
+import { classify, KINDS } from "../lib/storage.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
@@ -315,6 +316,86 @@ async function serveFile(req, res, file) {
   fs.createReadStream(file).pipe(res);
 }
 
+// ----------------------------------------------------------------- storage
+
+const CACHE = path.join(ROOT, ".transcode-cache");
+
+async function sizeOf(target) {
+  const st = await fsp.stat(target);
+  if (!st.isDirectory()) return { size: st.size, mtime: st.mtimeMs };
+  let size = 0;
+  let mtime = st.mtimeMs;
+  for (const entry of await fsp.readdir(target)) {
+    const inner = await sizeOf(path.join(target, entry));
+    size += inner.size;
+    mtime = Math.max(mtime, inner.mtime);
+  }
+  return { size, mtime };
+}
+
+async function listDir(dir, filter = () => true) {
+  let names;
+  try { names = await fsp.readdir(dir); } catch { return []; }
+  const out = [];
+  for (const name of names.filter((n) => !n.startsWith(".") && filter(n))) {
+    try { out.push({ name, ...(await sizeOf(path.join(dir, name))) }); } catch { /* vanished */ }
+  }
+  return out;
+}
+
+async function scanStorage() {
+  const [mediaFiles, renderFiles, rootFiles, cacheFiles] = await Promise.all([
+    listDir(MEDIA),
+    listDir(RENDERS),
+    listDir(ROOT, (n) => /^studio.*\.json(\.tmp)?$|^render-.*\.html$/.test(n)),
+    listDir(CACHE),
+  ]);
+  const result = classify({ media: mediaFiles, renders: renderFiles, root: rootFiles, cache: cacheFiles }, store.state);
+  let disk = null;
+  try {
+    const st = await fsp.statfs(ROOT);
+    disk = { free: st.bavail * st.bsize, total: st.blocks * st.bsize };
+  } catch { /* older Node */ }
+  return { ...result, disk, kinds: KINDS, folder: ROOT };
+}
+
+const areaDir = { media: MEDIA, renders: RENDERS, root: ROOT, cache: CACHE };
+
+// Make a trim final: the original goes, and nothing may try to restore
+// positions from it any more.
+function commitTrim(video) {
+  delete video.trim;
+  for (const fx of video.effects) delete fx.trimmedFrom;
+  if (video.captions) {
+    delete video.captions.offcuts;
+    for (const cue of video.captions.cues || []) delete cue.full;
+  }
+}
+
+async function deleteStored(targets) {
+  const { items } = await scanStorage();
+  let freed = 0;
+  const skipped = [];
+  for (const t of Array.isArray(targets) ? targets : []) {
+    // Only what the scan itself calls deletable — never a path from the page.
+    const it = items.find((x) => x.area === t?.area && x.name === t?.name);
+    if (!it || !it.deletable) { skipped.push(t?.name); continue; }
+    if (it.videoId && (mattesInFlight.has(it.videoId) || peopleInFlight.has(it.videoId) || trimsInFlight.has(it.videoId))) {
+      skipped.push(it.name);
+      continue;
+    }
+    await fsp.rm(path.join(areaDir[it.area], it.name), { recursive: true, force: true });
+    freed += it.size;
+    const video = it.videoId ? findVideo(it.videoId) : null;
+    if (video && it.kind === "matte") delete video.matteSignature;
+    if (video && it.kind === "people") { peopleCache.delete(video.id); delete video.peopleCount; }
+    if (video && it.kind === "original") commitTrim(video);
+    if (it.kind === "asset" && it.font) store.state.fonts = (store.state.fonts || []).filter((f) => f.file !== it.name);
+  }
+  await saveState();
+  return { freed, skipped };
+}
+
 // ------------------------------------------------------------------- routes
 
 async function addVideo(req, res, projectId) {
@@ -489,6 +570,24 @@ async function handleApi(req, res, url) {
     if (req.method === "DELETE" && id) {
       store.removeBrand(id);
       await saveState();
+      return send(res, 200, { ok: true });
+    }
+  }
+
+  // ------------------------------------------------------------ storage
+  if (section === "storage") {
+    if (req.method === "GET" && !id) return send(res, 200, await scanStorage());
+    if (req.method === "POST" && id === "delete") {
+      const { targets } = await readJson(req);
+      return send(res, 200, await deleteStored(targets));
+    }
+    // Show a file in the Finder, to move a render somewhere else.
+    if (req.method === "POST" && id === "reveal") {
+      const { area, name } = await readJson(req);
+      const { items } = await scanStorage();
+      const it = items.find((x) => x.area === area && x.name === name);
+      if (!it) return send(res, 404, { error: "fichier introuvable" });
+      spawn("open", ["-R", path.join(areaDir[it.area], it.name)], { stdio: "ignore" });
       return send(res, 200, { ok: true });
     }
   }

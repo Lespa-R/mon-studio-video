@@ -194,6 +194,18 @@ Text effects take an **Animation** param (`TEXT_ANIMS` in `lib/effects.mjs`):
 each style animates a unit — letters (`-ch`), words (`-wd`) or the whole line
 (a `clip-path` wipe) — and `textTimeline()` compresses it to fit the window.
 
+## Storage (`lib/storage.mjs`, `GET /api/storage`)
+
+The server lists `media/`, `renders/`, `.transcode-cache/` and the state files
+at the root; `classify()` sorts each into a kind (clip source, original kept
+by a trim, matte, people tracks, render, asset used or not, orphan, temp) from
+the studio state. Deletion (`POST /api/storage/delete`) re-scans and removes
+only files the scan marks deletable — never a clip's source or `studio.json`,
+never an asset still referenced, never a file modified in the last 30 s, never
+a file of a clip with a job in flight. Removing a trim's original makes the
+trim final (`commitTrim()` drops the position memories). `POST
+/api/storage/reveal` runs `open -R` to show a file in the Finder.
+
 ## Trimming (`lib/trim.mjs`, `POST /api/videos/:id/trim`)
 
 A trim keeps `[start, end]` of the original. The first one renames the clip's

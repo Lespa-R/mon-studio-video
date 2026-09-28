@@ -154,6 +154,47 @@
       .frame.busy::after { opacity: 1; }
       .fx.flash { animation: flash 1.1s ease-out; }
 
+      /* storage page --------------------------------------------------- */
+      main.storage { display: block; overflow-y: auto; }
+      .st-wrap { max-width: 980px; margin: 0 auto; padding: 22px 20px 60px; display: grid; gap: 22px; }
+      .st-sum { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+      .st-big { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+      .st-disk { color: var(--muted); font-size: 13px; }
+      .st-disk.low { color: #ffb454; }
+      .st-bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); }
+      .st-bar div { height: 100%; min-width: 2px; }
+      .st-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+      .st-legend span { display: inline-flex; align-items: center; gap: 6px; }
+      .st-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+      .st-legend b { color: var(--text); font-weight: 600; }
+      .st-sec h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
+      .st-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+      .st-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+      .st-card .t { font-size: 13px; font-weight: 600; }
+      .st-card .n { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+      .st-card .h { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+      .st-card button { justify-self: start; font-size: 12px; padding: 5px 10px; margin-top: 2px; }
+      .st-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      .st-table th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11.5px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+      .st-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+      .st-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .st-table .sub { color: var(--muted); font-size: 11px; }
+      .st-chip { display: inline-flex; align-items: center; gap: 5px; margin: 2px 6px 2px 0; padding: 2px 8px; border-radius: 999px;
+        background: var(--panel-2); border: 1px solid var(--line); font-size: 11.5px; white-space: nowrap; }
+      .st-chip button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 11px; padding: 0 2px; }
+      .st-chip button:hover { color: var(--danger); }
+      .st-row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+      .st-row-actions button, .st-row-actions a { font-size: 11.5px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line);
+        background: var(--panel); color: var(--text); text-decoration: none; cursor: pointer; }
+      .st-row-actions button.del:hover { color: var(--danger); border-color: var(--danger); }
+      .st-assets { display: flex; flex-wrap: wrap; gap: 8px; }
+      .st-asset { width: 120px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px; font-size: 11px; display: grid; gap: 4px; }
+      .st-asset .img { height: 64px; border-radius: 5px; background: #11161e center / cover no-repeat; display: grid; place-items: center; color: var(--muted); font-size: 18px; }
+      .st-asset .u { color: var(--ok); }
+      .st-asset .x { color: var(--muted); }
+      .st-foot { font-size: 11.5px; color: var(--muted); }
+      .st-empty { font-size: 12.5px; color: var(--muted); }
+
       /* trim dialog ---------------------------------------------------- */
       .trim-dlg { width: min(760px, 100%); }
       .trim-view { background: #000; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; max-height: 46vh; }
@@ -289,7 +330,7 @@
         box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
       }
       .dlg-title { font-size: 14px; font-weight: 600; }
-      .dlg-msg { font-size: 13px; color: var(--muted); line-height: 1.5; }
+      .dlg-msg { font-size: 13px; color: var(--muted); line-height: 1.5; white-space: pre-line; }
       .dlg-msg[hidden], .dlg-field[hidden] { display: none; }
       .dlg-field { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
       .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }
@@ -440,6 +481,7 @@
         <button id="tab-edit" class="on">Montage</button>
         <button id="tab-lib">Bibliothèque d'effets</button>
         <button id="tab-brand">Charte graphique</button>
+        <button id="tab-storage">Stockage</button>
       </nav>
     </header>
 
@@ -592,6 +634,10 @@
         <h2>Aperçu</h2>
         <div class="brand-preview" id="brand-preview"></div>
       </section>
+    </main>
+
+    <main id="view-storage" class="storage" hidden>
+      <div class="st-wrap" id="storage"></div>
     </main>
 
     <div class="toast" id="toast" role="alert" hidden></div>
@@ -1408,6 +1454,235 @@
       }
 
       // Playhead, read straight off the preview's background video.
+      // ===================================================== storage
+
+      const fmtBytes = (n) => {
+        if (n < 1024) return `${n} o`;
+        const units = ["Ko", "Mo", "Go", "To"];
+        let v = n / 1024;
+        let i = 0;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return `${v >= 100 ? Math.round(v) : v.toFixed(1).replace(".", ",")} ${units[i]}`;
+      };
+      const fmtDate = (ms) => new Date(ms).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      const KIND_COLORS = {
+        source: "#4f8cff", original: "#8b5cf6", matte: "#22c1c3", people: "#14b8a6",
+        render: "#f59e0b", asset: "#ec4899", orphan: "#ef4444", temp: "#94a3b8", state: "#64748b",
+      };
+
+      async function deleteFiles(items, title, message, okLabel = "Supprimer") {
+        if (!items.length) return;
+        const size = items.reduce((s, x) => s + x.size, 0);
+        if (!(await askConfirm(title, `${message}\n\n${items.length} fichier${items.length > 1 ? "s" : ""} · ${fmtBytes(size)} libérés.`, okLabel))) return;
+        const r = await api("/api/storage/delete", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ targets: items.map((x) => ({ area: x.area, name: x.name })) }),
+        });
+        toast(`${fmtBytes(r.freed)} libérés${r.skipped.length ? ` · ${r.skipped.length} fichier(s) en cours d'utilisation, laissé(s) de côté` : ""}.`);
+        await refresh();
+        drawStorage();
+      }
+
+      async function drawStorage() {
+        const el = $("#storage");
+        let data;
+        try {
+          data = await api("/api/storage");
+        } catch (error) {
+          el.innerHTML = `<div class="st-empty">${escapeHtml(error.message)}</div>`;
+          return;
+        }
+        const { items, totals, total, disk, kinds } = data;
+        const by = (kind) => items.filter((x) => x.kind === kind);
+        const sum = (list) => list.reduce((s, x) => s + x.size, 0);
+        el.innerHTML = "";
+
+        // ---- summary
+        const summary = document.createElement("div");
+        summary.className = "st-sec";
+        const low = disk && disk.free / disk.total < 0.1;
+        summary.innerHTML = `
+          <div class="st-sum">
+            <div class="st-big">Le studio occupe ${fmtBytes(total)}</div>
+            ${disk ? `<div class="st-disk${low ? " low" : ""}">Il reste ${fmtBytes(disk.free)} libres sur ton disque (${Math.round((disk.free / disk.total) * 100)} %)</div>` : ""}
+          </div>`;
+        const bar = document.createElement("div");
+        bar.className = "st-bar";
+        const legend = document.createElement("div");
+        legend.className = "st-legend";
+        for (const kind of Object.keys(kinds)) {
+          if (!totals[kind]) continue;
+          const seg = document.createElement("div");
+          seg.style.width = (totals[kind] / total) * 100 + "%";
+          seg.style.background = KIND_COLORS[kind];
+          seg.title = `${kinds[kind].label} : ${fmtBytes(totals[kind])}`;
+          bar.appendChild(seg);
+          legend.insertAdjacentHTML("beforeend",
+            `<span title="${escapeHtml(kinds[kind].hint)}"><i style="background:${KIND_COLORS[kind]}"></i>${escapeHtml(kinds[kind].label)} <b>${fmtBytes(totals[kind])}</b></span>`);
+        }
+        summary.append(bar, legend);
+        summary.style.display = "grid";
+        summary.style.gap = "10px";
+        el.appendChild(summary);
+
+        // ---- quick clean-ups
+        const quick = document.createElement("div");
+        quick.className = "st-sec";
+        quick.innerHTML = "<h3>Faire de la place</h3>";
+        const cards = document.createElement("div");
+        cards.className = "st-cards";
+        const card = (title, list, hint, button, onClick) => {
+          const size = sum(list);
+          const c = document.createElement("div");
+          c.className = "st-card";
+          c.innerHTML = `<div class="t">${escapeHtml(title)}</div><div class="n">${fmtBytes(size)}</div><div class="h">${escapeHtml(hint)}</div>`;
+          const b = document.createElement("button");
+          b.textContent = button;
+          b.disabled = !list.length;
+          b.onclick = onClick;
+          c.appendChild(b);
+          cards.appendChild(c);
+        };
+        const caches = items.filter((x) => (x.kind === "matte" || x.kind === "people" || x.kind === "temp") && x.deletable);
+        card("Caches recalculables", caches,
+          "Découpes, suivis et fichiers de travail. Sans risque : recalculés au prochain aperçu (quelques secondes à quelques minutes).",
+          "Vider les caches", () => deleteFiles(caches, "Vider les caches ?",
+            "Les découpes et suivis seront recalculés au prochain aperçu de chaque clip."));
+        const orphans = by("orphan").filter((x) => x.deletable);
+        card("Fichiers orphelins", orphans, kinds.orphan.hint, "Supprimer",
+          () => deleteFiles(orphans, "Supprimer les fichiers orphelins ?", "Aucun clip ni effet ne s'en sert."));
+        const unused = by("asset").filter((x) => x.deletable);
+        card("Images et polices inutilisées", unused, "Importées puis plus utilisées par aucun effet, préréglage ni charte.", "Supprimer",
+          () => deleteFiles(unused, "Supprimer les images et polices inutilisées ?", "Elles ne servent à aucun effet, préréglage ni charte."));
+        const originals = by("original").filter((x) => x.deletable);
+        card("Originaux gardés après rognage", originals, kinds.original.hint, "Rendre les rognages définitifs",
+          () => deleteFiles(originals, "Rendre les rognages définitifs ?",
+            "Tu ne pourras plus rallonger ces clips ni revenir à la vidéo entière.", "Rendre définitif"));
+        const renders = by("render");
+        card("Rendus MP4", renders, "Tes exports. Déplace ceux à garder (bouton Finder ci-dessous), supprime les autres.",
+          "Voir la liste", () => document.getElementById("st-renders").scrollIntoView({ behavior: "smooth" }));
+        quick.appendChild(cards);
+        el.appendChild(quick);
+
+        // ---- per clip
+        const clips = new Map();
+        for (const it of items.filter((x) => x.videoId)) {
+          if (!clips.has(it.videoId)) clips.set(it.videoId, { clip: it.clip, project: it.project, files: [] });
+          clips.get(it.videoId).files.push(it);
+        }
+        const clipSec = document.createElement("div");
+        clipSec.className = "st-sec";
+        clipSec.innerHTML = "<h3>Par clip</h3>";
+        if (!clips.size) clipSec.insertAdjacentHTML("beforeend", '<div class="st-empty">Aucun clip.</div>');
+        else {
+          const table = document.createElement("table");
+          table.className = "st-table";
+          table.innerHTML = "<tr><th>Clip</th><th>Fichiers</th><th style=\"text-align:right\">Total</th></tr>";
+          const rows = [...clips.values()].sort((a, b) => sum(b.files) - sum(a.files));
+          const names = { source: "vidéo", original: "original", matte: "découpe", people: "suivi" };
+          for (const c of rows) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${escapeHtml(c.clip)}<div class="sub">${escapeHtml(c.project)}</div></td><td></td><td class="num">${fmtBytes(sum(c.files))}</td>`;
+            for (const f of c.files.sort((a, b) => b.size - a.size)) {
+              const chip = document.createElement("span");
+              chip.className = "st-chip";
+              chip.innerHTML = `<i style="width:8px;height:8px;border-radius:2px;background:${KIND_COLORS[f.kind]}"></i>${names[f.kind] || f.kind} ${fmtBytes(f.size)}`;
+              if (f.deletable) {
+                const x = document.createElement("button");
+                x.textContent = f.kind === "original" ? "rendre définitif" : "vider";
+                x.title = kinds[f.kind].hint;
+                x.onclick = () => deleteFiles([f],
+                  f.kind === "original" ? "Rendre ce rognage définitif ?" : "Vider ce cache ?",
+                  f.kind === "original" ? "Tu ne pourras plus rallonger ce clip." : "Il sera recalculé au prochain aperçu de ce clip.",
+                  f.kind === "original" ? "Rendre définitif" : "Vider");
+                chip.appendChild(x);
+              }
+              tr.children[1].appendChild(chip);
+            }
+            table.appendChild(tr);
+          }
+          clipSec.appendChild(table);
+        }
+        el.appendChild(clipSec);
+
+        // ---- renders
+        const rSec = document.createElement("div");
+        rSec.className = "st-sec";
+        rSec.id = "st-renders";
+        rSec.innerHTML = `<h3>Rendus MP4 · ${fmtBytes(sum(renders))}</h3>`;
+        if (!renders.length) rSec.insertAdjacentHTML("beforeend", '<div class="st-empty">Aucun rendu.</div>');
+        else {
+          const table = document.createElement("table");
+          table.className = "st-table";
+          table.innerHTML = "<tr><th>Fichier</th><th>Date</th><th style=\"text-align:right\">Poids</th><th></th></tr>";
+          for (const r of [...renders].sort((a, b) => b.mtime - a.mtime)) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${escapeHtml(r.name)}</td><td class="sub">${fmtDate(r.mtime)}</td><td class="num">${fmtBytes(r.size)}</td><td><div class="st-row-actions"></div></td>`;
+            const actions = tr.querySelector(".st-row-actions");
+            const open = document.createElement("a");
+            open.href = `/renders/${encodeURIComponent(r.name)}`;
+            open.target = "_blank";
+            open.textContent = "Ouvrir";
+            const finder = document.createElement("button");
+            finder.textContent = "Finder";
+            finder.title = "Afficher dans le Finder, pour le déplacer ailleurs";
+            finder.onclick = () => api("/api/storage/reveal", {
+              method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ area: r.area, name: r.name }),
+            });
+            const del = document.createElement("button");
+            del.className = "del";
+            del.textContent = "Supprimer";
+            del.disabled = !r.deletable;
+            del.onclick = () => deleteFiles([r], "Supprimer ce rendu ?", r.name);
+            actions.append(open, finder, del);
+            table.appendChild(tr);
+          }
+          rSec.appendChild(table);
+          const all = document.createElement("button");
+          all.textContent = "Supprimer tous les rendus";
+          all.style.cssText = "margin-top:10px;font-size:12px";
+          all.onclick = () => deleteFiles(renders.filter((x) => x.deletable), "Supprimer tous les rendus ?",
+            "Pense à déplacer d'abord ceux que tu veux garder.");
+          rSec.appendChild(all);
+        }
+        el.appendChild(rSec);
+
+        // ---- assets
+        const assets = by("asset");
+        const aSec = document.createElement("div");
+        aSec.className = "st-sec";
+        aSec.innerHTML = `<h3>Images et polices · ${fmtBytes(sum(assets))}</h3>`;
+        if (!assets.length) aSec.insertAdjacentHTML("beforeend", '<div class="st-empty">Aucune image ni police importée.</div>');
+        else {
+          const grid = document.createElement("div");
+          grid.className = "st-assets";
+          const fontName = (file) => (state.fonts || []).find((f) => f.file === file)?.name || "Police";
+          for (const a of [...assets].sort((x, y) => Number(x.used) - Number(y.used) || y.size - x.size)) {
+            const box = document.createElement("div");
+            box.className = "st-asset";
+            box.innerHTML = `
+              <div class="img" style="${a.font ? "" : `background-image:url('/media/${encodeURIComponent(a.name)}')`}">${a.font ? "Aa" : ""}</div>
+              <div>${a.font ? escapeHtml(fontName(a.name)) : ""} ${fmtBytes(a.size)}</div>
+              <div class="${a.used ? "u" : "x"}">${a.used ? "utilisée" : "inutilisée"}</div>`;
+            if (a.deletable) {
+              const b = document.createElement("button");
+              b.textContent = "Supprimer";
+              b.style.fontSize = "11px";
+              b.onclick = () => deleteFiles([a], "Supprimer ce fichier ?", "Il ne sert à aucun effet, préréglage ni charte.");
+              box.appendChild(b);
+            }
+            grid.appendChild(box);
+          }
+          aSec.appendChild(grid);
+        }
+        el.appendChild(aSec);
+
+        el.insertAdjacentHTML("beforeend",
+          `<div class="st-foot">Dossier du studio : ${escapeHtml(data.folder)} — les vidéos d'origine que tu as importées depuis ton Mac ne sont jamais touchées : le studio travaille sur ses propres copies.</div>`);
+      }
+
       // ======================================================= trim
 
       // The dialog plays the ORIGINAL footage (kept on disk after a first
@@ -2505,9 +2780,12 @@
         $("#view-edit").hidden = which !== "edit";
         $("#view-lib").hidden = which !== "lib";
         $("#view-brand").hidden = which !== "brand";
+        $("#view-storage").hidden = which !== "storage";
+        $("#tab-storage").classList.toggle("on", which === "storage");
         $("#tab-edit").classList.toggle("on", which === "edit");
         $("#tab-lib").classList.toggle("on", which === "lib");
         $("#tab-brand").classList.toggle("on", which === "brand");
+        if (which === "storage") { drawStorage(); return; }
         if (which === "brand") {
           if (!brandSel) brandSel = state.brandId || state.brands[0]?.id || "default";
           drawBrandPage();
@@ -2527,6 +2805,7 @@
       $("#tab-edit").onclick = () => showView("edit");
       $("#tab-lib").onclick = () => showView("lib");
       $("#tab-brand").onclick = () => showView("brand");
+      $("#tab-storage").onclick = () => showView("storage");
 
 
       // ================================================== output format
