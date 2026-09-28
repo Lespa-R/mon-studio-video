@@ -233,6 +233,34 @@ Le texte derrière toi reste parfaitement calé, même recadré en vertical.
 **Rendre le MP4** produit la vidéo et affiche un lien de téléchargement. Tu peux
 continuer à modifier pendant le rendu : il utilise l'état au moment du clic.
 
+### 7. Promos de sites (motion design Remotion)
+
+L'onglet **Promos** gère les vidéos promo de tes sites : une suite de scènes
+animées (mots frappés sur le rythme, chiffres, avis, final) aux couleurs d'une
+charte du studio, avec une musique générée calée sur l'image. Format par défaut :
+**4:5 pour LinkedIn** (1080×1350).
+
+- **Écrire le storyboard** : demande à Claude « fais une promo pour https://… ».
+  La skill `promo-site` lit le site, ton backoffice et ton brief, te propose un
+  storyboard à valider, crée la charte et la promo. Le bouton **+ Promo** en crée
+  une vide si tu préfères partir de zéro.
+- **Retoucher** : chaque scène a ses champs (textes, chiffres, citations…),
+  sa durée en mesures et son énergie (intro, drop, pause, montée, final), qui
+  pilote la musique et les flashes. `**mot**` = couleur d'accent, `*mot*` =
+  italique, `|` = retour à la ligne. **Enregistrer** écrit le storyboard.
+- **Charte** : choisis une charte du studio, elle est copiée dans la promo
+  (couleurs, polices, logo).
+- **Capturer le site** (page entière, pour la scène « Le site qui défile »),
+  **Composer la musique**, **Contrôler** (brouillon rapide + planche de 2 images
+  par scène + bords + niveau sonore), **Rendre la vidéo finale** (encodage
+  conforme LinkedIn).
+- **Ajouter au montage** transforme la vidéo rendue en clip du projet ouvert,
+  pour y ajouter des sous-titres ou des effets.
+
+Les promos vivent hors du studio, dans `~/Code/promos/<nom>/` (avec une seule
+installation de Remotion partagée, faite à la première promo). Le studio, lui,
+reste sans dépendance.
+
 ---
 
 ## Où sont mes fichiers
@@ -244,6 +272,7 @@ Tout est dans le dossier du projet :
 | `studio.json` | ta bibliothèque : projets, dossiers, effets, préréglages |
 | `media/` | tes clips importés, leurs découpes, suivis, originaux après rognage, images et polices |
 | `renders/` | les MP4 exportés |
+| `~/Code/promos/` | les promos Remotion (hors du studio) : storyboard, charte copiée, musique, rendus dans `out/` |
 
 Ces trois-là ne partent **pas** sur GitHub (ils sont personnels et lourds).
 Pour sauvegarder ta bibliothèque, copie-les ailleurs.

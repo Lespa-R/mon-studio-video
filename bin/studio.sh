@@ -22,13 +22,22 @@ major=$(node -p 'process.versions.node.split(".")[0]')
 command -v ffmpeg >/dev/null || fail "ffmpeg introuvable. Installe-le : brew install ffmpeg"
 command -v swiftc >/dev/null || fail "swiftc introuvable. Installe les outils Xcode : xcode-select --install"
 
-# ---- déjà lancé ? on ouvre simplement le navigateur
+# ---- déjà lancé ? on ouvre le navigateur — sauf si le code a changé depuis :
+# un serveur lancé avant une mise à jour (parfois en arrière-plan, sans fenêtre
+# à fermer) garderait l'ancien code. On l'arrête et on repart sur le neuf.
 if [ -f .studio-port ]; then
   port=$(cat .studio-port)
   if curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:$port/api/state" | grep -q 200; then
-    say "Déjà lancé sur http://localhost:$port — ouverture du navigateur."
-    open "http://localhost:$port"
-    exit 0
+    newer=$(find server lib -name '*.mjs' -newer .studio-port | head -1)
+    if [ -z "$newer" ]; then
+      say "Déjà lancé sur http://localhost:$port — ouverture du navigateur."
+      open "http://localhost:$port"
+      exit 0
+    fi
+    say "Le studio a été mis à jour depuis son lancement : redémarrage…"
+    old=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null)
+    [ -n "$old" ] && kill $old 2>/dev/null
+    for _ in $(seq 1 20); do lsof -tiTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 || break; sleep 0.25; done
   fi
 fi
 rm -f .studio-port

@@ -20,6 +20,7 @@ import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
 import { SYSTEM_FONTS, COLOR_ROLES, DEFAULT_BRAND } from "../lib/brand.mjs";
 import { LANGUAGES, groupWords, normaliseCues, parseSrt, toSrt, chunkPlan } from "../lib/captions.mjs";
+import { makePromos } from "./promos.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MEDIA = path.join(ROOT, "media");
@@ -194,13 +195,16 @@ async function writeAtomic(file, contents) {
 // and two in parallel only thrash.
 let renderQueue = Promise.resolve();
 
+// Promos (Remotion) wait in the same queue: one render at a time, whatever the engine.
+function inRenderQueue(job, work) {
+  job.message = "En attente de la fin du rendu précédent…";
+  const turn = renderQueue.then(() => work(job));
+  renderQueue = turn.catch(() => {});
+  return turn;
+}
+
 function queueRender({ name, html, mattes }) {
-  return startJob("render", (job) => {
-    job.message = "En attente de la fin du rendu précédent…";
-    const turn = renderQueue.then(() => runRender({ name, html, mattes }, job));
-    renderQueue = turn.catch(() => {});
-    return turn;
-  });
+  return startJob("render", (job) => inRenderQueue(job, () => runRender({ name, html, mattes }, job)));
 }
 
 async function runRender({ name, html, mattes }, job) {
@@ -256,6 +260,11 @@ async function runRender({ name, html, mattes }, job) {
 const slug = (name) =>
   path.basename(name, path.extname(name)).toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "clip";
+
+// ------------------------------------------------------------------ promos
+
+// Declared after the helpers it uses (send, readJson, serveFile) — see below.
+let promos;
 
 // ------------------------------------------------------------------ helpers
 
@@ -413,12 +422,30 @@ async function addVideo(req, res, projectId) {
     req.on("error", reject);
   });
 
+  try {
+    send(res, 200, { video: await registerClip({ id, target, original, ext, projectId }) });
+  } catch (error) {
+    send(res, 400, { error: error.message });
+  }
+}
+
+// A rendered promo becomes a clip of the active project (then subtitles, effects…).
+async function importClip(file, original) {
+  const id = newId("vid_");
+  const ext = path.extname(file).toLowerCase() || ".mp4";
+  const target = path.join(MEDIA, `${id}-bg${ext}`);
+  await fsp.mkdir(MEDIA, { recursive: true });
+  await fsp.copyFile(file, target);
+  return { video: await registerClip({ id, target, original, ext, projectId: null }) };
+}
+
+async function registerClip({ id, target, original, ext, projectId }) {
   let info;
   try {
     info = await media.probe(target);
   } catch (error) {
     await fsp.rm(target, { force: true });
-    return send(res, 400, { error: `Fichier illisible : ${error.message}` });
+    throw new Error(`Fichier illisible : ${error.message}`);
   }
 
   if (info.rotation) {
@@ -442,7 +469,7 @@ async function addVideo(req, res, projectId) {
   project.videos.push(video);
   store.state.activeVideo = video.id;
   await saveState();
-  send(res, 200, { video });
+  return video;
 }
 
 // Images used by effects (a replacement background). Checked by extension and
@@ -591,6 +618,8 @@ async function handleApi(req, res, url) {
       return send(res, 200, { ok: true });
     }
   }
+
+  if (section === "promos") return promos.handleApi(req, res, parts);
 
   if (section === "jobs" && req.method === "GET") {
     const job = jobs.get(id);
@@ -1237,6 +1266,7 @@ async function handler(req, res) {
     if (p.startsWith("/media/")) {
       return serveFile(req, res, path.join(MEDIA, path.basename(p)));
     }
+    if (p.startsWith("/promos/")) return await promos.serve(req, res, p);
     if (p.startsWith("/renders/")) {
       return serveFile(req, res, path.join(RENDERS, path.basename(p)));
     }
@@ -1265,6 +1295,11 @@ function listen(server, port, attemptsLeft) {
     server.listen(port, "127.0.0.1", () => resolve(port));
   });
 }
+
+promos = makePromos({
+  store, startJob, inRenderQueue, send, readJson, serveFile, MEDIA, importClip,
+  fontLabels: Object.fromEntries(SYSTEM_FONTS.map((f) => [f.value, f.label])),
+});
 
 async function main() {
   for (const binary of ["ffmpeg", "ffprobe"]) {
