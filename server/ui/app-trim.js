@@ -1,4 +1,4 @@
-// Mon Studio HyperFrame — interface (app-trim.js).
+// Mon Studio Vidéo — interface (app-trim.js).
 // Trimming a clip.
 // Classic scripts sharing one global scope, loaded in order by index.html
 // (no build, no modules): top-level code may only use what earlier files

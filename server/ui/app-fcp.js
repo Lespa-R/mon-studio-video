@@ -1,4 +1,4 @@
-// Mon Studio HyperFrame — interface (app-fcp.js).
+// Mon Studio Vidéo — interface (app-fcp.js).
 // Final Cut Pro habits: timecode, skimming, timeline zoom, showing / hiding
 // the browser, timeline and inspector, the effects browser, the audio
 // waveform, and the keyboard shortcuts Robin already knows.

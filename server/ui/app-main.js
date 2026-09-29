@@ -1,4 +1,4 @@
-// Mon Studio HyperFrame — interface (app-main.js).
+// Mon Studio Vidéo — interface (app-main.js).
 // Clipboard, wiring, resizable layout, boot.
 // Classic scripts sharing one global scope, loaded in order by index.html
 // (no build, no modules): top-level code may only use what earlier files

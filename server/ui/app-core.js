@@ -1,4 +1,4 @@
-// Mon Studio HyperFrame — interface (app-core.js).
+// Mon Studio Vidéo — interface (app-core.js).
 // Dialogs, render controls, preview player, jobs, timeline.
 // Classic scripts sharing one global scope, loaded in order by index.html
 // (no build, no modules): top-level code may only use what earlier files

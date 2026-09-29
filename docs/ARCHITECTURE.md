@@ -1,4 +1,4 @@
-# Mon Studio HyperFrame — architecture
+# Mon Studio Vidéo — architecture
 
 Technical reference: how the studio is built, and why. For day-to-day use, see
 the [README](../README.md); for working on the code with Claude, see

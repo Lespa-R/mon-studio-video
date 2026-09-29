@@ -1,5 +1,5 @@
 {
-  "name": "mon-studio-hyperframe",
+  "name": "mon-studio-video",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,5 +12,5 @@
     "test": "node --test"
   },
   "version": "1.5.0",
-  "description": "Mon Studio HyperFrame — ajoute des éléments HyperFrames sur tes plans vidéo, en local."
+  "description": "Mon Studio Vidéo — ajoute des éléments HyperFrames sur tes plans vidéo, en local."
 }

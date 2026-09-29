@@ -1,4 +1,4 @@
-// Mon Studio HyperFrame — interface (app-promos.js).
+// Mon Studio Vidéo — interface (app-promos.js).
 // Promos tab (Remotion, skill promo-site).
 // Classic scripts sharing one global scope, loaded in order by index.html
 // (no build, no modules): top-level code may only use what earlier files
@@ -58,7 +58,7 @@ async function drawPromos() {
     // studio launched before this tab existed does not know the route.
     const stale = /unknown route|not found/i.test(error.message);
     $("#promo-editor").innerHTML = `<div class="pr-empty">${stale
-      ? "Le serveur du studio date d'avant l'onglet Promos.<br><b>Relance le studio</b> : double-clic sur « Mon Studio HyperFrame » sur le Bureau."
+      ? "Le serveur du studio date d'avant l'onglet Promos.<br><b>Relance le studio</b> : double-clic sur « Mon Studio Vidéo » sur le Bureau."
       : escapeHtml(error.message)}</div>`;
     return;
   }

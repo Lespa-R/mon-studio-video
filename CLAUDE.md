@@ -1,4 +1,4 @@
-# Mon Studio HyperFrame — notes for Claude
+# Mon Studio Vidéo — notes for Claude
 
 A local web studio that adds HyperFrames elements to video clips: text passing
 behind the person (via a per-frame cut-out), titles, lower thirds, image
@@ -260,5 +260,10 @@ script error: run `npm test` after touching the UI.
   not a speech API.
 - **Zero runtime dependencies.** No `npm install`, no build step. Remotion
   stays in the separate `~/Code/promos` workspace.
-- **Private GitHub repo**: `Lespa-R/mon-studio-hyperframe`. `studio.json`,
+- **Name: « Mon Studio Vidéo »** (renamed from « Mon Studio HyperFrame » on
+  2026-09-29: folder `~/Code/mon-studio-video`, repo, launcher, UI). HyperFrames
+  stays the name of the effects technology. The transcription app keeps its
+  bundle id `local.mon-studio-hyperframe.transcribe`: macOS ties the speech
+  permission to it.
+- **Private GitHub repo**: `Lespa-R/mon-studio-video`. `studio.json`,
   `media/`, `renders/` are never committed.

@@ -1,4 +1,4 @@
-// Mon Studio HyperFrame — interface (app-storage.js).
+// Mon Studio Vidéo — interface (app-storage.js).
 // Storage page: what takes space, what can go.
 // Classic scripts sharing one global scope, loaded in order by index.html
 // (no build, no modules): top-level code may only use what earlier files

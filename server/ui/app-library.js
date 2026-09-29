@@ -1,4 +1,4 @@
-// Mon Studio HyperFrame — interface (app-library.js).
+// Mon Studio Vidéo — interface (app-library.js).
 // Effect library page.
 // Classic scripts sharing one global scope, loaded in order by index.html
 // (no build, no modules): top-level code may only use what earlier files

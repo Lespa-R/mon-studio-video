@@ -22,6 +22,6 @@
   <key>LSUIElement</key>
   <true/>
   <key>NSSpeechRecognitionUsageDescription</key>
-  <string>Mon Studio HyperFrame transcrit l'audio de tes clips sur ce Mac pour créer les sous-titres. Rien n'est envoyé sur Internet.</string>
+  <string>Mon Studio Vidéo transcrit l'audio de tes clips sur ce Mac pour créer les sous-titres. Rien n'est envoyé sur Internet.</string>
 </dict>
 </plist>

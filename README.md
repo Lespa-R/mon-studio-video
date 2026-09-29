@@ -1,4 +1,4 @@
-# Mon Studio HyperFrame
+# Mon Studio Vidéo
 
 Ton studio local pour habiller tes plans vidéo avec des éléments HyperFrames :
 texte qui passe **derrière toi**, titres, bandeaux, étalonnage, flou
@@ -11,14 +11,14 @@ Tout tourne sur ton Mac. Rien n'est envoyé en ligne.
 
 ## Démarrer
 
-**Le plus simple** : double-clique sur **« Mon Studio HyperFrame »** sur ton
+**Le plus simple** : double-clique sur **« Mon Studio Vidéo »** sur ton
 Bureau. Une fenêtre Terminal s'ouvre, vérifie que tout est installé, lance le
 studio et ouvre ton navigateur.
 
 **Depuis un terminal** :
 
 ```bash
-cd ~/Code/mon-studio-hyperframe
+cd ~/Code/mon-studio-video
 npm run studio
 ```
 
@@ -41,8 +41,8 @@ Le lanceur les vérifie et te dit quoi installer s'il en manque un.
 ### Sur un autre Mac
 
 ```bash
-git clone git@github.com:Lespa-R/mon-studio-hyperframe.git ~/Code/mon-studio-hyperframe
-cd ~/Code/mon-studio-hyperframe
+git clone git@github.com:Lespa-R/mon-studio-video.git ~/Code/mon-studio-video
+cd ~/Code/mon-studio-video
 npm run studio
 ```
 

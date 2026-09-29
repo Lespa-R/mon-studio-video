@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Mon Studio HyperFrame — lance le studio et ouvre le navigateur.
+# Mon Studio Vidéo — lance le studio et ouvre le navigateur.
 #
 #   npm run studio          depuis le dossier du projet
-#   double-clic             sur « Mon Studio HyperFrame.command » (Bureau)
+#   double-clic             sur « Mon Studio Vidéo.command » (Bureau)
 #
 # La fenêtre du Terminal EST le studio : la fermer (ou Ctrl-C) l'arrête.
 set -uo pipefail
@@ -13,7 +13,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 say()  { printf '  %s\n' "$*"; }
 fail() { printf '\n  ✗ %s\n\n' "$*"; read -r -p "  Appuie sur Entrée pour fermer… " _; exit 1; }
 
-printf '\n  Mon Studio HyperFrame\n  ─────────────────────\n'
+printf '\n  Mon Studio Vidéo\n  ────────────────\n'
 
 # ---- prérequis
 command -v node >/dev/null   || fail "Node.js introuvable. Installe-le : brew install node"
