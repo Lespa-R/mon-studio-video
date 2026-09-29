@@ -7,11 +7,14 @@
 // storyboard.json, hand them a studio brand kit, and run the skill's scripts as
 // studio jobs — renders share the studio's one-at-a-time queue.
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import net from "node:net";
 import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 import {
   SCENE_TYPES, ENERGIES, MOODS, PROMO_FORMATS, SLUG, slugify,
@@ -20,11 +23,46 @@ import {
 
 export const PROMOS_DIR = process.env.PROMOS_DIR || path.join(os.homedir(), "Code", "promos");
 export const SKILL_DIR = process.env.PROMO_SKILL_DIR || path.join(os.homedir(), ".claude", "skills", "promo-site");
+// Keeps Remotion Studio on 127.0.0.1 (it binds every interface otherwise).
+const LOOPBACK = fileURLToPath(new URL("./loopback.cjs", import.meta.url));
 const script = (name) => path.join(SKILL_DIR, "scripts", name);
 const ENV = { ...process.env, PROMOS_DIR, PROMO_LOG: "info", PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}` };
 
 // Files of a promo the UI may load. Anything else stays private.
-const SERVABLE = /^(out\/check\/sheet\.png|out\/[\w.-]+\.mp4|site\/shot\.png|public\/site\.png|public\/brand\/logo\.png)$/;
+const SERVABLE = /^(out\/check\/sheet(-scene)?\.png|out\/check\/scene-\d+\.mp4|out\/[\w.-]+\.mp4|out\/[\w.-]+-cover\.jpg|site\/shot\.png|public\/site\.png|public\/brand\/logo\.png)$/;
+// Pictures a scene may point at (copied along when a scene is imported).
+const ASSET_REF = /^[\w./-]+\.(png|jpe?g|webp|svg|gif)$/i;
+
+// The engine files a promo gets from the skill's template. A promo keeps its
+// own copy (a fix for one video stays in that video); the studio says when
+// the template has moved on and can bring a promo up to date.
+async function engineFiles(src) {
+  const out = [];
+  const walk = async (dir, rel) => {
+    let entries = [];
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (e.name.startsWith(".")) continue;
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) { if (r === "engine" || r.startsWith("engine/")) await walk(path.join(dir, e.name), r); }
+      else if (r.startsWith("engine/") || ["Promo.tsx", "Root.tsx", "index.ts"].includes(r)) out.push(r);
+    }
+  };
+  await walk(src, "");
+  return out.sort();
+}
+
+async function engineStamp(src) {
+  const files = await engineFiles(src);
+  const hash = crypto.createHash("sha1");
+  let mtime = 0;
+  for (const f of files) {
+    const full = path.join(src, f);
+    hash.update(f).update(await fsp.readFile(full));
+    mtime = Math.max(mtime, (await fsp.stat(full)).mtimeMs);
+  }
+  return { hash: hash.digest("hex"), mtime, files: files.length };
+}
 
 const exists = (p) => fsp.access(p).then(() => true, () => false);
 
@@ -97,12 +135,53 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
     const list = [];
     for (const name of names.filter((n) => n.endsWith(".mp4") && !n.startsWith("."))) {
       const st = await fsp.stat(path.join(out, name));
-      list.push({ name, size: st.size, mtime: st.mtimeMs, url: `/promos/${slug}/out/${name}` });
+      const cover = name.replace(/\.mp4$/, "-cover.jpg");
+      const hasCover = await exists(path.join(out, cover));
+      list.push({ name, size: st.size, mtime: st.mtimeMs, url: `/promos/${slug}/out/${name}`, cover: hasCover ? `/promos/${slug}/out/${cover}?t=${Math.round(st.mtimeMs)}` : null });
     }
     return list.sort((a, b) => b.mtime - a.mtime);
   }
 
   const mtimeOf = async (p) => { try { return (await fsp.stat(p)).mtimeMs; } catch { return null; } };
+
+  async function engineStatus(slug) {
+    const [mine, latest] = await Promise.all([engineStamp(path.join(dirOf(slug), "src")), engineStamp(path.join(SKILL_DIR, "template", "src"))]);
+    if (!latest.files) return null;
+    const same = mine.hash === latest.hash;
+    return { same, newer: !same && latest.mtime > mine.mtime };
+  }
+
+  // Remotion Studio (interactive preview, frame by frame), one per promo.
+  const previews = new Map(); // slug → { proc, url }
+  // npx starts Remotion as a child: kill the whole process group.
+  const stopPreviews = () => { for (const p of previews.values()) try { process.kill(-p.proc.pid); } catch { /* gone */ } };
+  process.once("exit", stopPreviews);
+  for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => { stopPreviews(); process.exit(0); });
+
+  const freePort = (from) => new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once("error", () => resolve(freePort(from + 1)));
+    srv.listen(from, "127.0.0.1", () => srv.close(() => resolve(from)));
+  });
+
+  async function openPreview(slug) {
+    const running = previews.get(slug);
+    if (running) {
+      spawn("open", [running.url], { stdio: "ignore" });
+      return running.url;
+    }
+    const port = await freePort(3400);
+    const url = `http://localhost:${port}`;
+    const proc = spawn("npx", ["remotion", "studio", path.join(slug, "src", "index.ts"), `--public-dir=${path.join(slug, "public")}`, `--port=${port}`],
+      { cwd: PROMOS_DIR, env: { ...ENV, NODE_OPTIONS: `--require ${LOOPBACK}` }, stdio: "ignore", detached: true });
+    previews.set(slug, { proc, url });
+    proc.on("exit", () => { if (previews.get(slug)?.proc === proc) previews.delete(slug); });
+    return url;
+  }
+
+  // Refresh the publication files (post text, cover, fiche) after an edit.
+  const repackage = (dir) => exists(path.join(dir, "out", "publish.json")).then((has) =>
+    has && run("python3", [script("package.py"), dir]).catch((e) => console.error("package.py :", e.message)));
 
   async function summary(slug) {
     const sb = await readStoryboard(slug);
@@ -128,6 +207,9 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
       sheet: sheet ? `/promos/${slug}/out/check/sheet.png?t=${Math.round(sheet)}` : null,
       shot: shot ? `/promos/${slug}/site/shot.png?t=${Math.round(shot)}` : null,
       check: await fsp.readFile(path.join(dir, "out", "check", "report.txt"), "utf8").catch(() => null),
+      publish: await fsp.readFile(path.join(dir, "out", "publish.json"), "utf8").then(JSON.parse, () => null),
+      engine: await engineStatus(slug),
+      preview: previews.get(slug)?.url || null,
     };
   }
 
@@ -222,7 +304,88 @@ export function makePromos({ store, startJob, inRenderQueue, send, readJson, ser
 
     if (sub === "storyboard" && req.method === "PUT") {
       await writeStoryboard(slug, await readJson(req));
+      repackage(dir);
       return send(res, 200, await detail(slug));
+    }
+
+    // Draft of the LinkedIn post, from the storyboard (when none was written).
+    if (sub === "post-draft" && req.method === "GET") {
+      const text = await run("python3", [script("package.py"), dir, "--post"]);
+      return send(res, 200, { text });
+    }
+
+    // Only one scene, at half resolution: a few seconds instead of the whole video.
+    if (sub === "scene" && req.method === "POST") {
+      const { index } = await readJson(req);
+      const sb = await readStoryboard(slug);
+      const n = Number(index);
+      if (!Number.isInteger(n) || n < 0 || n >= sb.scenes.length) return send(res, 400, { error: "scène inconnue" });
+      return send(res, 200, { job: startJob("promo-scene", async (job) => {
+        if (!(await exists(path.join(dir, "public", "music.wav"))) && sb.music.mode !== "file") {
+          job.message = "Composition de la musique…";
+          await run("python3", [path.join(dir, "music", "compose.py"), dir], { job });
+        }
+        job.message = `Aperçu de la scène ${n + 1}…`;
+        const log = await run("bash", [script("check_render.sh"), dir, sb.formats[0], "--scene", String(n + 1)], { job, onLine: remotionProgress });
+        const stamp = Date.now();
+        return {
+          index: n,
+          video: `/promos/${slug}/out/check/scene-${n + 1}.mp4?t=${stamp}`,
+          sheet: `/promos/${slug}/out/check/sheet-scene.png?t=${stamp}`,
+          report: log.split("\n").filter((l) => /Textes|^\s+·|Bords/.test(l)).map((l) => l.replace(/^⚠️ /, "")).join("\n"),
+        };
+      }) });
+    }
+
+    if (sub === "preview" && req.method === "POST") {
+      const url = await openPreview(slug);
+      return send(res, 200, { url });
+    }
+
+    // Bring the promo's engine up to the skill's template; the old copy goes to the Trash.
+    if (sub === "engine" && req.method === "POST") {
+      const src = path.join(dir, "src");
+      const tpl = path.join(SKILL_DIR, "template", "src");
+      if (!(await exists(tpl))) return send(res, 400, { error: "modèle de la skill introuvable" });
+      await toTrash(src, `${slug} moteur`);
+      await fsp.cp(tpl, src, { recursive: true });
+      return send(res, 200, await detail(slug));
+    }
+
+    // Copy a scene from another promo, with the pictures it points at.
+    if (sub === "import-scene" && req.method === "POST") {
+      const { from, index } = await readJson(req);
+      if (!SLUG.test(String(from)) || !(await exists(path.join(dirOf(from), "storyboard.json")))) return send(res, 404, { error: "promo source introuvable" });
+      const scene = (await readStoryboard(from)).scenes[Number(index)];
+      if (!scene) return send(res, 404, { error: "scène introuvable" });
+      const refs = new Set();
+      const collect = (v) => {
+        if (typeof v === "string" && ASSET_REF.test(v) && !v.includes("..")) refs.add(v);
+        else if (v && typeof v === "object") Object.values(v).forEach(collect);
+      };
+      collect(scene.props);
+      const copied = [];
+      for (const ref of refs) {
+        const srcFile = path.join(dirOf(from), "public", ref);
+        const dest = path.join(dir, "public", ref);
+        if (!(await exists(srcFile)) || (await exists(dest))) continue;
+        await fsp.mkdir(path.dirname(dest), { recursive: true });
+        await fsp.copyFile(srcFile, dest);
+        copied.push(ref);
+      }
+      return send(res, 200, { scene, copied });
+    }
+
+    // The soundtrack alone (for another edit), next to the renders.
+    if (sub === "music-export" && req.method === "POST") {
+      const sb = await readStoryboard(slug);
+      const src = sb.music.mode === "file" ? path.join(dir, "public", sb.music.file) : path.join(dir, "public", "music.wav");
+      if (!(await exists(src))) return send(res, 400, { error: "pas encore de musique : lance « Nouvelle musique »" });
+      const out = path.join(dir, "out", `${slug}-musique.m4a`);
+      await fsp.mkdir(path.dirname(out), { recursive: true });
+      await run("ffmpeg", ["-v", "error", "-y", "-i", src, "-c:a", "aac", "-b:a", "256k", out]);
+      spawn("open", ["-R", out], { stdio: "ignore" });
+      return send(res, 200, { file: out });
     }
 
     if (sub === "brand" && req.method === "POST") {

@@ -110,3 +110,20 @@ test("slugs are safe folder names", () => {
   assert.ok(SLUG.test(slugify("x")));
   assert.ok(!SLUG.test("../etc"));
 });
+
+test("the LinkedIn post is kept, trimmed and capped at LinkedIn's limit", () => {
+  assert.equal(normaliseStoryboard({ post: "  Bonjour\n" }).post, "Bonjour");
+  assert.equal(normaliseStoryboard({ post: "   " }).post, undefined);
+  assert.equal(normaliseStoryboard({ post: 42 }).post, undefined);
+  assert.equal(normaliseStoryboard({ post: "x".repeat(5000) }).post.length, 3000);
+});
+
+test("the line style and its scenes survive normalisation", () => {
+  const sb = normaliseStoryboard({ style: "line", scenes: [{ type: "lineNoise", bars: 2, energy: "build", props: { alerts: ["x"] } }, { type: "lineClose", bars: 2, energy: "finale", props: { lineStop: 0.6 } }] });
+  assert.equal(sb.style, "line");
+  assert.deepEqual(sb.scenes.map((x) => x.type), ["lineNoise", "lineClose"]);
+  assert.equal(sb.scenes[1].props.lineStop, 0.6);
+  assert.equal(normaliseStoryboard({ style: "weird" }).style, undefined);
+  assert.equal(normaliseStoryboard({ style: "board" }).style, "board");
+  assert.equal(normaliseStoryboard({ style: "chart" }).style, "chart");
+});

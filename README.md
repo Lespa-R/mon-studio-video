@@ -54,6 +54,28 @@ Aucun `npm install` : le studio n'a pas de dépendance. Ta bibliothèque
 
 ## Utiliser le studio
 
+L'écran **Montage** est organisé comme **Final Cut Pro** : la bibliothèque
+(projets et clips en vignettes) à gauche, la visionneuse au centre,
+l'inspecteur à droite (onglets Effets, Sous-titres, Projet), et la timeline
+sur toute la largeur en bas. Le clip est la ligne principale (pellicule et
+forme d'onde) ; chaque effet est un bloc de couleur au-dessus (violet :
+textes, rose : animations, sarcelle : image) qu'on déplace ou rallonge à la
+souris. Un clic sur un bloc l'ouvre dans l'inspecteur. Le navigateur d'effets
+(**⌘5**) : double-clic sur une vignette, ou glisse-la sur la timeline — l'effet
+se pose à la tête de lecture. « Partager » (**⌘E**) rend le MP4.
+
+| Raccourci | Action |
+|---|---|
+| Espace · J K L | lecture / pause · reculer d'1 s, pause, lecture |
+| ← → · ⇧← ⇧→ | image par image · 10 images |
+| Début · Fin | début / fin du clip |
+| S | survol de la timeline (l'aperçu suit la souris) |
+| ⌘+ ⌘− · ⇧Z | zoom de la timeline · tout voir |
+| ⌘5 · ⌘4 · ⌃⌘1 · ⌃⌘2 | effets · inspecteur · bibliothèque · timeline |
+| V · ⌫ | activer/désactiver · supprimer l'effet sélectionné |
+| ⌘C ⌘V · ⌘I · ⌘E | copier/coller les effets · importer · partager |
+
+
 ### 1. Un projet, des clips
 
 - **Projets** (colonne de gauche) : `+ Projet` pour en créer un, `+ Dossier`
@@ -253,8 +275,18 @@ charte du studio, avec une musique générée calée sur l'image. Format par dé
 - **Capturer le site** (page entière + thème de la vidéo tiré du site : clair
   ou sombre, dégradés, boutons), **Nouvelle musique** (chaque clic tire une
   musique propre à cette promo, jamais celle d'une autre), **Contrôler** (brouillon rapide + planche de 2 images
-  par scène + bords + niveau sonore), **Rendre la vidéo finale** (encodage
-  conforme LinkedIn).
+  par scène + **textes coupés ou qui se chevauchent, mesurés automatiquement** +
+  bords + niveau sonore), **Rendre la vidéo finale** (encodage conforme
+  LinkedIn, plus une **image de couverture**, la **fiche Project Hub** et le
+  **texte du post**).
+- **▶ sur une scène** : aperçu de cette scène seule en quelques secondes.
+  **Aperçu interactif** : Remotion Studio, image par image, sans rendu.
+- **Post LinkedIn** : un brouillon tiré du storyboard, à retoucher et copier.
+  **Publier sur Project Hub** copie la demande à coller dans Claude.
+- **Reprendre une scène d'une autre promo** (avec ses images), **Exporter la
+  musique** seule, **Mettre à jour le moteur** d'une promo ancienne (l'ancien
+  part à la Corbeille).
+- Formats : 4:5 (LinkedIn), 9:16 (reels, stories) et 1:1 sont tous prêts.
 - **Ajouter au montage** transforme la vidéo rendue en clip du projet ouvert,
   pour y ajouter des sous-titres ou des effets.
 - **Supprimer** : le bouton sous une vidéo rendue l'envoie à la corbeille (le

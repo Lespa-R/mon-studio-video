@@ -20,8 +20,8 @@ npm run check    # HyperFrames lint of index.html (= last rendered composition)
 ```
 
 - **Restart the server after changing anything in `lib/` or `server/`.** Node
-  caches modules: a render will silently use the old code. `server/ui/index.html`
-  is read from disk on every request — a reload is enough.
+  caches modules: a render will silently use the old code. The UI files
+  (`server/ui/*`) are read from disk on every request — a reload is enough.
 - **Test on an isolated copy, not the user's running studio.** Copy the code to a temp dir and run it on another port (`node server/server.mjs 3102`) — it gets its own `studio.json` and `media/`. Creating a project in his live studio once switched what his open tab showed and lost an image he was choosing.
 - **Throwaway projects, never the user's.** Create one through the API,
   upload `~/Desktop/Hello World.mov` (a 3 s talking-head clip), test, then
@@ -35,9 +35,18 @@ npm run check    # HyperFrames lint of index.html (= last rendered composition)
 ## Map
 
 ```
-server/server.mjs      HTTP + JSON API, zero dependencies; preview player; render queue
+server/server.mjs      HTTP + JSON API, zero dependencies; render queue
+server/storage.mjs     Storage page API: scan, delete (names only), reveal
+server/player.mjs      the in-page preview player wrapped around a composition
 server/promos.mjs      « Promos » tab: Remotion promos driven through the promo-site skill (see below)
-server/ui/index.html   the whole UI (vanilla JS, no build)
+server/loopback.cjs    preloaded into Remotion Studio so it listens on 127.0.0.1 only
+server/ui/index.html   markup; styles.css; app-*.js = classic scripts sharing one
+                       global scope, loaded in order (no build, no modules):
+                       core (dialogs, clips, inspector, preview, timeline) · storage ·
+                       trim · editor (subtitles, drag, projects, presets) · library ·
+                       promos · pages (tabs, format, brand) · main (wiring, layout, boot) ·
+                       fcp (Final Cut habits: timecode, skimming, zoom, areas,
+                       effects browser, waveform, shortcuts)
 lib/effects.mjs        text effects, TEXT_ANIMS + registry  ← add effects here
 lib/effects-anim.mjs   animated elements (canvas space)     ← or here
 lib/effects-image.mjs  image treatments (filters, grain…)   ← or here
@@ -174,6 +183,22 @@ work (`new_promo.sh`, `capture_site.sh`, `parse_site.py`, `prepare_logo.py`,
   « Ajouter au montage » copies a render into `media/` as an ordinary clip.
 - Test with `PROMOS_DIR=<temp copy>` (symlink its `node_modules` to
   `~/Code/promos/node_modules`) on the isolated studio copy.
+
+## Montage = Final Cut Pro layout (asked for by the user, 2026-09-29)
+
+Robin knows Final Cut Pro best: the montage mirrors it. Browser (projects +
+clip thumbnails) | viewer (transport, timecode) | inspector (Effets ·
+Sous-titres · Projet = output format and brand) on top; the timeline across
+the whole width below, with the effects browser (⌘5) on its right. The clip
+is the primary storyline (filmstrip + waveform, drawn in the browser, nothing
+on disk); timed effects are connected clips coloured by family (Textes violet,
+Animations rose, Image sarcelle); whole-clip effects are badges on the clip;
+subtitles are the top lane. A new timed effect lands at the playhead.
+Skimming (S), J/K/L, arrows, ⌘±/⇧Z zoom, ⌘4 / ⌃⌘1 / ⌃⌘2 areas, V, ⌫, ⌘E,
+⌘I — keep to Final Cut's shortcuts when adding one, and list it in
+`SHORTCUTS` (app-fcp.js), which « ⌨ Raccourcis » / ? shows.
+`test/ui.test.mjs` opens every tab in a headless Chrome and fails on any
+script error: run `npm test` after touching the UI.
 
 ## Gotchas already paid for
 

@@ -14,13 +14,14 @@ import { Store, newId } from "../lib/store.mjs";
 import { compose, needsMatte, needsTracking } from "../lib/compose.mjs";
 import { buildTracks } from "../lib/tracking.mjs";
 import { normaliseTrim, shiftForTrim } from "../lib/trim.mjs";
-import { classify, KINDS } from "../lib/storage.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
 import { SYSTEM_FONTS, COLOR_ROLES, DEFAULT_BRAND } from "../lib/brand.mjs";
 import { LANGUAGES, groupWords, normaliseCues, parseSrt, toSrt, chunkPlan } from "../lib/captions.mjs";
 import { makePromos } from "./promos.mjs";
+import { makeStorage } from "./storage.mjs";
+import { playable } from "./player.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MEDIA = path.join(ROOT, "media");
@@ -336,48 +337,7 @@ async function serveFile(req, res, file) {
 
 // ----------------------------------------------------------------- storage
 
-const CACHE = path.join(ROOT, ".transcode-cache");
-
-async function sizeOf(target) {
-  const st = await fsp.stat(target);
-  if (!st.isDirectory()) return { size: st.size, mtime: st.mtimeMs };
-  let size = 0;
-  let mtime = st.mtimeMs;
-  for (const entry of await fsp.readdir(target)) {
-    const inner = await sizeOf(path.join(target, entry));
-    size += inner.size;
-    mtime = Math.max(mtime, inner.mtime);
-  }
-  return { size, mtime };
-}
-
-async function listDir(dir, filter = () => true) {
-  let names;
-  try { names = await fsp.readdir(dir); } catch { return []; }
-  const out = [];
-  for (const name of names.filter((n) => !n.startsWith(".") && filter(n))) {
-    try { out.push({ name, ...(await sizeOf(path.join(dir, name))) }); } catch { /* vanished */ }
-  }
-  return out;
-}
-
-async function scanStorage() {
-  const [mediaFiles, renderFiles, rootFiles, cacheFiles] = await Promise.all([
-    listDir(MEDIA),
-    listDir(RENDERS),
-    listDir(ROOT, (n) => /^studio.*\.json(\.tmp)?$|^render-.*\.html$/.test(n)),
-    listDir(CACHE),
-  ]);
-  const result = classify({ media: mediaFiles, renders: renderFiles, root: rootFiles, cache: cacheFiles }, store.state);
-  let disk = null;
-  try {
-    const st = await fsp.statfs(ROOT);
-    disk = { free: st.bavail * st.bsize, total: st.blocks * st.bsize };
-  } catch { /* older Node */ }
-  return { ...result, disk, kinds: KINDS, folder: ROOT, promos: await promos.usage() };
-}
-
-const areaDir = { media: MEDIA, renders: RENDERS, root: ROOT, cache: CACHE };
+// Storage page: server/storage.mjs (scan, delete, reveal).
 
 // Make a trim final: the original goes, and nothing may try to restore
 // positions from it any more.
@@ -390,29 +350,18 @@ function commitTrim(video) {
   }
 }
 
-async function deleteStored(targets) {
-  const { items } = await scanStorage();
-  let freed = 0;
-  const skipped = [];
-  for (const t of Array.isArray(targets) ? targets : []) {
-    // Only what the scan itself calls deletable — never a path from the page.
-    const it = items.find((x) => x.area === t?.area && x.name === t?.name);
-    if (!it || !it.deletable) { skipped.push(t?.name); continue; }
-    if (it.videoId && (mattesInFlight.has(it.videoId) || peopleInFlight.has(it.videoId) || trimsInFlight.has(it.videoId))) {
-      skipped.push(it.name);
-      continue;
-    }
-    await fsp.rm(path.join(areaDir[it.area], it.name), { recursive: true, force: true });
-    freed += it.size;
+const storage = makeStorage({
+  ROOT, MEDIA, RENDERS, store, send, readJson, saveState,
+  promos: () => promos,
+  busy: (id) => mattesInFlight.has(id) || peopleInFlight.has(id) || trimsInFlight.has(id),
+  forget(it) {
     const video = it.videoId ? findVideo(it.videoId) : null;
     if (video && it.kind === "matte") delete video.matteSignature;
     if (video && it.kind === "people") { peopleCache.delete(video.id); delete video.peopleCount; }
     if (video && it.kind === "original") commitTrim(video);
     if (it.kind === "asset" && it.font) store.state.fonts = (store.state.fonts || []).filter((f) => f.file !== it.name);
-  }
-  await saveState();
-  return { freed, skipped };
-}
+  },
+});
 
 // ------------------------------------------------------------------- routes
 
@@ -610,23 +559,7 @@ async function handleApi(req, res, url) {
     }
   }
 
-  // ------------------------------------------------------------ storage
-  if (section === "storage") {
-    if (req.method === "GET" && !id) return send(res, 200, await scanStorage());
-    if (req.method === "POST" && id === "delete") {
-      const { targets } = await readJson(req);
-      return send(res, 200, await deleteStored(targets));
-    }
-    // Show a file in the Finder, to move a render somewhere else.
-    if (req.method === "POST" && id === "reveal") {
-      const { area, name } = await readJson(req);
-      const { items } = await scanStorage();
-      const it = items.find((x) => x.area === area && x.name === name);
-      if (!it) return send(res, 404, { error: "fichier introuvable" });
-      spawn("open", ["-R", path.join(areaDir[it.area], it.name)], { stdio: "ignore" });
-      return send(res, 200, { ok: true });
-    }
-  }
+  if (section === "storage") return storage.handleApi(req, res, id);
 
   if (section === "promos") return promos.handleApi(req, res, parts);
 
@@ -1095,121 +1028,6 @@ async function handleApi(req, res, url) {
   }
 
   send(res, 404, { error: "unknown route" });
-}
-
-// Serve a composition for the in-page preview. A <base> tag makes the
-// relative media/ paths resolve, and a small player stands in for the
-// HyperFrames runtime: it windows every video and audio element by its
-// data-start / data-duration / data-media-start, and drives the GSAP timeline
-// off the footage's clock, keeping the cut-out and the audio in step.
-function playable(html) {
-  html = html.replace("<head>", `<head>\n    <base href="/">`);
-  html = html.replace("</body>", `
-    <script>
-      (function () {
-        var root = document.getElementById("root");
-        var tl = (window.__timelines || {})["main"];
-        if (!root || !tl) return;
-        var total = parseFloat(root.getAttribute("data-duration")) || 0;
-        var quiet = function (p) { if (p && p.catch) p.catch(function () {}); };
-
-        var media = Array.prototype.map.call(
-          document.querySelectorAll("video[data-start], audio[data-start]"),
-          function (el) {
-            var start = parseFloat(el.getAttribute("data-start")) || 0;
-            return {
-              el: el, start: start,
-              end: start + (parseFloat(el.getAttribute("data-duration")) || 0),
-              from: parseFloat(el.getAttribute("data-media-start")) || 0,
-              video: el.tagName === "VIDEO",
-              // The footage is the clock while it plays; the cut-out and the
-              // audio follow it.
-              master: el.id === "bg",
-            };
-          });
-
-        var t = 0, playing = false, last = null;
-        window.__studioTime = function () { return t; };
-        window.__studioDuration = total;
-
-        function apply(hard) {
-          tl.seek(t);
-          media.forEach(function (m) {
-            var on = t >= m.start && t < m.end;
-            if (m.video) m.el.style.visibility = on ? "" : "hidden";
-            if (!on) { if (!m.el.paused) m.el.pause(); return; }
-            var want = m.from + (t - m.start);
-            var slack = m.master ? 0.3 : m.video ? 0.08 : 0.2;
-            if (hard || Math.abs(m.el.currentTime - want) > slack) m.el.currentTime = want;
-            if (playing && m.el.paused) quiet(m.el.play());
-            if (!playing && !m.el.paused) m.el.pause();
-          });
-        }
-
-        function masterAt(time) {
-          for (var i = 0; i < media.length; i++) {
-            var m = media[i];
-            if (m.master && time >= m.start && time < m.end) return m;
-          }
-          return null;
-        }
-
-        function frame(now) {
-          if (playing) {
-            var dt = last === null ? 0 : (now - last) / 1000;
-            last = now;
-            var m = masterAt(t);
-            if (m && !m.el.paused && !m.el.seeking && m.el.readyState >= 3) {
-              // Follow the footage while it plays; never step backwards.
-              t = Math.max(t, m.start + (m.el.currentTime - m.from));
-            } else {
-              // Until the footage is actually playing, the wall clock does.
-              t += dt;
-            }
-            if (t >= total) {
-              t = total;
-              playing = false;
-              parent.postMessage({ type: "ended" }, "*");
-            }
-            apply(false);
-          } else {
-            last = null;
-          }
-          requestAnimationFrame(frame);
-        }
-
-        function seek(to) { t = Math.max(0, Math.min(to, total)); apply(true); }
-
-        // The studio reopens this page on every edit and passes the moment it
-        // wants to land on as #t=. URLSearchParams rather than a regex: this
-        // whole script lives in a template literal, where a backslash escape
-        // would be eaten before it reached the browser.
-        var wanted = parseFloat(new URLSearchParams(location.hash.slice(1)).get("t") || "0");
-        var ready = function (el) {
-          return new Promise(function (r) {
-            if (el.readyState >= 2) return r();
-            el.addEventListener("loadeddata", r, { once: true });
-            setTimeout(r, 4000);
-          });
-        };
-        Promise.all(media.map(function (m) { return ready(m.el); })).then(function () {
-          seek(wanted);
-          parent.postMessage({ type: "ready", t: t }, "*");
-        });
-        requestAnimationFrame(frame);
-
-        window.addEventListener("message", function (e) {
-          var d = e.data;
-          if (d === "play") { if (t >= total) t = 0; playing = true; apply(true); }
-          if (d === "pause") { playing = false; apply(false); }
-          if (d === "restart") { t = 0; playing = true; apply(true); }
-          if (d && d.type === "seek") seek(d.t);
-        });
-      })();
-    <\/script>
-  </body>`);
-
-  return html;
 }
 
 async function servePreview(res, id) {
