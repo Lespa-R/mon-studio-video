@@ -170,8 +170,14 @@ async function ensureMatte(video, job) {
   return entry.promise;
 }
 
+// MATTE_VERSION changes when personmatte's output does (v2: temporal
+// stabiliser), so every clip's cut-out is rebuilt once with the new code.
+const MATTE_VERSION = 2;
 const matteSignature = (video) =>
-  JSON.stringify(video.matteOptions || {}) + "|" + video.ext;
+  `v${MATTE_VERSION}|` + JSON.stringify(video.matteOptions || {}) + "|" + video.ext;
+
+// What the cut-out keeps: the person alone, or the person and what they hold.
+const MATTE_MODELS = ["person", "subject"];
 
 const filesOf = (video) => {
   const { bg, fg } = mediaNames(video);
@@ -820,6 +826,20 @@ async function handleApi(req, res, url) {
         await saveState();
         return send(res, 200, { ok: true });
       }
+    }
+
+    // cut-out -----------------------------------------------------------------
+    // Which detector cuts the clip out. The signature changes with it, so the
+    // next preview or render rebuilds the cut-out.
+    if (sub === "matte" && req.method === "PATCH") {
+      const body = await readJson(req);
+      if (!MATTE_MODELS.includes(body.model)) return send(res, 400, { error: "unknown model" });
+      if (mattesInFlight.has(video.id)) {
+        return send(res, 409, { error: "Découpe en cours sur ce clip : réessaie quand elle est finie." });
+      }
+      video.matteOptions = { ...(video.matteOptions || {}), model: body.model };
+      await saveState();
+      return send(res, 200, { video });
     }
 
     // trim ------------------------------------------------------------------

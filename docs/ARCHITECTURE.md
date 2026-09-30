@@ -476,9 +476,21 @@ per render. Drop the clip's `matteOptions.quality` in `studio.json` to
 
 - **One person.** `VNGeneratePersonSegmentationRequest` returns a single
   combined mask; two people both land in the foreground layer.
-- **Edge flicker.** The mask is computed per frame with no temporal model. Fast
-  hand motion can shimmer at the edges. Raise `matteOptions.smooth` towards
-  `0.3` in `studio.json` to calm it, at the cost of slight ghosting.
+- **Flicker, and how it is tamed.** Vision segments each frame on its own, so
+  edges and whole patches (a chest behind a held object) flip in and out. Since
+  v1.7 personmatte averages each mask with 2 frames before and after
+  (`--window`, triangular weights, no lag), sharpens the average with a short
+  contrast curve, closes pin-holes, and holds the last mask up to 8 frames when
+  a detection drops. Measured on a handheld clip: pixels flipping per frame
+  2 472 → 95. `matteOptions.smooth` (one-sided easing) still exists on top.
+- **Two detectors** (`matteOptions.model`, the « Découpe » menu of the
+  inspector, shown when a clip has an effect that uses the cut-out):
+  `person` (VNGeneratePersonSegmentationRequest, the default) or `subject`
+  (VNGenerateForegroundInstanceMaskRequest: the person *and* what they hold;
+  far steadier when something is held in front, 3× faster, but may also keep a
+  prop on the table). Changing it rebuilds the cut-out. `MATTE_VERSION` in
+  server.mjs is part of the cut-out signature: bump it whenever personmatte's
+  output changes, so every clip is rebuilt once.
 - **One composition file at a time.** `index.html` always holds the clip you are
   previewing. The library and every effect stack live in `studio.json`, so
   nothing is lost when you switch.

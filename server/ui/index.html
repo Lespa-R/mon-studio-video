@@ -89,6 +89,14 @@
               <button id="fx-paste" title="Coller les effets copiés sur ce clip (⌘V)" hidden>Coller</button>
               <button id="fxb-open" title="Navigateur d'effets (⌘5)">＋ Effets…</button>
             </div>
+            <label class="matte-pick" id="matte-pick" hidden
+                   title="Ce que la découpe garde devant le texte. « Personne + objets tenus » est aussi plus stable quand quelqu'un tient quelque chose devant lui.">
+              <span>Découpe</span>
+              <select id="matte-model">
+                <option value="person">Personne seule</option>
+                <option value="subject">Personne + objets tenus</option>
+              </select>
+            </label>
             <div class="hint" id="clip-note" hidden></div>
             <div class="scroll" id="stack"></div>
           </div>
