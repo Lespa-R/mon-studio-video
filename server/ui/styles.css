@@ -415,6 +415,9 @@ button.danger:hover:not(:disabled) { filter: brightness(1.08); background: var(-
   box-shadow: 0 12px 30px rgba(0, 0, 0, .4);
 }
 .toast[hidden] { display: none; }
+.toast.info { background: var(--panel); border-color: var(--line); color: var(--text); }
+.toast button { margin-left: 10px; font-size: 12px; padding: 3px 9px; }
+.clip-tile input.rename { width: 100%; font-size: 12px; padding: 2px 4px; }
 
 .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .bar .grow { flex: 1; }

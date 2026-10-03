@@ -43,6 +43,25 @@ const effectData = (fx) => ({
   params: { ...fx.params },
 });
 
+// ⌘D: a copy of the effect, same settings and timing, selected.
+async function duplicateFx(v, fxId) {
+  const fx = v.effects.find((f) => f.id === fxId);
+  if (!fx) return;
+  try {
+    await flushPatches();
+    const { video } = await api(`/api/videos/${v.id}/effects/paste`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ effects: [effectData(fx)] }),
+    });
+    await refresh();
+    selectFx(video.effects[video.effects.length - 1].id);
+    setStatus("Effet dupliqué.");
+    preview();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
 function drawClipbar() {
   const v = videoById(selected);
   $("#fx-copy").disabled = !v || !v.effects.length;
@@ -249,20 +268,94 @@ $("#fx-add").onclick = async () => {
   }
 };
 
+// The tab title shows the render's progress, so it can be followed from
+// another tab or window; the end offers to open the file or find it.
 $("#render").onclick = async () => {
   $("#render").disabled = true;
   $("#prog").hidden = false;
+  const title = document.title;
+  const v = videoById(selected);
+  const ticker = setInterval(() => {
+    const p = Math.round(($("#prog").value || 0) * 100);
+    document.title = `${p} % · rendu — ${title}`;
+  }, 500);
   try {
     const { job } = await api(`/api/videos/${selected}/render`, { method: "POST" });
     const done = await waitJob(job.id);
+    const file = done.result.output.split("/").pop();
+    const open = (reveal) => api(`/api/renders/${encodeURIComponent(file)}/open`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reveal }),
+    }).catch((e) => toast(e.message));
     setStatus(`Rendu terminé — <a href="${done.result.output}" download>télécharger le MP4</a>`);
+    toast(`Rendu terminé : « ${v ? v.name : file} »`, {
+      info: true, ms: 15000,
+      actions: [{ label: "Ouvrir", run: () => open(false) }, { label: "Afficher dans le Finder", run: () => open(true) }],
+    });
+    document.title = `✓ Rendu terminé — ${title}`;
+    setTimeout(() => { document.title = title; }, 8000);
   } catch (error) {
     setStatus(error.message, true);
+    document.title = title;
   } finally {
+    clearInterval(ticker);
     $("#prog").hidden = true;
     $("#render").disabled = false;
   }
 };
+
+// ------------------------------------------------ rename a clip
+
+function renameClip(v, nameEl) {
+  const input = document.createElement("input");
+  input.className = "rename";
+  input.value = v.name;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const name = input.value.trim();
+    if (save && name && name !== v.name) {
+      try {
+        await api(`/api/videos/${v.id}`, {
+          method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }),
+        });
+      } catch (error) { toast(error.message); }
+    }
+    await refresh();
+  };
+  input.onkeydown = (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") finish(true);
+    if (e.key === "Escape") finish(false);
+  };
+  input.onblur = () => finish(true);
+}
+
+// ------------------------------------------------ undo / redo (⌘Z, ⇧⌘Z)
+// The server keeps the steps (effects, subtitles, cut-out choice) of each
+// clip; trimming and cutting reset them.
+
+async function undoRedo(which) {
+  const v = videoById(selected);
+  if (!v) return;
+  try {
+    await flushPatches();
+    const r = await api(`/api/videos/${v.id}/${which}`, { method: "POST" });
+    // A notice, not the status line: the preview that follows clears it.
+    if (!r.done) return toast(which === "undo" ? "Rien à annuler sur ce clip." : "Rien à rétablir.", { info: true, ms: 2500 });
+    await refresh();
+    drawCaptions(true);
+    toast(`${which === "undo" ? "Annulé" : "Rétabli"} : ${r.label}.`, { info: true, ms: 2500 });
+    preview();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+$("#undo").onclick = () => undoRedo("undo");
+$("#redo").onclick = () => undoRedo("redo");
 
 // Keyboard shortcuts (Final Cut style): app-fcp.js.
 

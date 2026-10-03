@@ -311,7 +311,9 @@ const SHORTCUTS = [
   ["⌘5", "Navigateur d'effets"],
   ["⌘4 · ⌃⌘1 · ⌃⌘2", "Inspecteur · navigateur · timeline"],
   ["V", "Activer / désactiver l'effet sélectionné"],
-  ["⌫", "Supprimer l'effet sélectionné"],
+  ["⌫", "Supprimer l'effet sélectionné (⌘Z le remet)"],
+  ["⌘Z · ⇧⌘Z", "Annuler · rétablir (effets, sous-titres, découpe)"],
+  ["⌘D", "Dupliquer l'effet sélectionné"],
   ["⌘C · ⌘V", "Copier / coller les effets du clip"],
   ["⌘I · ⌘E", "Importer · Partager (rendre le MP4)"],
   ["Échap", "Désélectionner"],
@@ -345,6 +347,8 @@ document.addEventListener("keydown", async (e) => {
   if (cmd && k === "e") { stop(); if (!$("#render").disabled) $("#render").click(); return; }
   if (cmd && (k === "=" || k === "+")) { stop(); return setZoom(Number($("#tl-zoom").value) * 1.5); }
   if (cmd && k === "-") { stop(); return setZoom(Number($("#tl-zoom").value) / 1.5); }
+  if (cmd && k === "z") { stop(); return undoRedo(e.shiftKey ? "redo" : "undo"); }
+  if (cmd && k === "d" && v && selectedFx) { stop(); return duplicateFx(v, selectedFx); }
   if (cmd && k === "c" && v && !window.getSelection()?.toString()) { stop(); return $("#fx-copy").click(); }
   if (cmd && k === "v" && v && !$("#fx-paste").hidden) { stop(); return $("#fx-paste").click(); }
   if (cmd || e.altKey) return;
@@ -368,13 +372,16 @@ document.addEventListener("keydown", async (e) => {
     await patch(v.id, fx.id, { enabled: fx.enabled === false });
     return;
   }
+  // No question asked, as in Final Cut: ⌘Z puts it back.
   if (fx && (e.key === "Backspace" || e.key === "Delete")) {
     stop();
     const def = state.effects.find((d) => d.type === fx.type);
-    if (!(await askConfirm("Supprimer l'effet", `Retirer « ${fx.name || def?.label || fx.type} » de ce clip ?`, "Supprimer"))) return;
     await api(`/api/videos/${v.id}/effects/${fx.id}`, { method: "DELETE" });
     selectedFx = null;
     await refresh();
+    toast(`« ${fx.name || def?.label || fx.type} » supprimé.`, {
+      info: true, actions: [{ label: "Annuler (⌘Z)", run: () => undoRedo("undo") }],
+    });
     preview();
   }
 }, true);

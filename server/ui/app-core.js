@@ -67,12 +67,21 @@ function dialog({ title, message = "", value, textLabel = "Nom", choices = null,
 // Any action that fails without its own handling ends up here, visibly —
 // the library page has no status line, so failures there used to vanish.
 let toastTimer = null;
-function toast(message) {
+// `info` messages (a render done, an undo) are neutral and may carry buttons:
+// actions = [{ label, run }].
+function toast(message, { info = false, actions = [], ms = 6000 } = {}) {
   const el = $("#toast");
   el.textContent = message;
+  el.classList.toggle("info", info);
+  for (const a of actions) {
+    const b = document.createElement("button");
+    b.textContent = a.label;
+    b.onclick = () => { el.hidden = true; a.run(); };
+    el.append(b);
+  }
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 6000);
+  toastTimer = setTimeout(() => { el.hidden = true; }, ms);
 }
 window.addEventListener("unhandledrejection", (e) => {
   toast(e.reason && e.reason.message ? e.reason.message : String(e.reason));
@@ -142,9 +151,13 @@ function drawLibrary() {
       <button class="x" title="Supprimer">×</button>`;
     clipThumb(v).then((url) => { if (url) row.querySelector(".thumb").style.backgroundImage = `url(${url})`; });
     row.onclick = (e) => {
-      if (e.target.closest("button")) return;
+      if (e.target.closest("button, input")) return;
       select(v.id);
     };
+    // Double-click the name to rename the clip in place (Final Cut habit).
+    const nameEl = row.querySelector(".name");
+    nameEl.title = "Double-clic pour renommer";
+    nameEl.ondblclick = (e) => { e.stopPropagation(); renameClip(v, nameEl); };
     row.querySelector(".x").onclick = async () => {
       if (!(await askConfirm("Supprimer ce clip ?",
         `« ${v.name} », ses effets et sa découpe seront supprimés.`))) return;
@@ -264,6 +277,9 @@ function drawStack() {
     head.querySelector(".x").onclick = async () => {
       await api(`/api/videos/${v.id}/effects/${fx.id}`, { method: "DELETE" });
       await refresh();
+      toast(`« ${fx.name || def.label} » supprimé.`, {
+        info: true, actions: [{ label: "Annuler (⌘Z)", run: () => undoRedo("undo") }],
+      });
       preview();
     };
     card.appendChild(head);
@@ -529,6 +545,22 @@ function field(f, value, onChange, tagId) {
 const pending = new Map();
 let patchTimer = null;
 
+// Send the edits still waiting now (before an undo, say).
+async function flushPatches() {
+  clearTimeout(patchTimer);
+  const jobs = [...pending.entries()];
+  pending.clear();
+  for (const [k, payload] of jobs) {
+    const [vid, fid] = k.split(":");
+    await api(`/api/videos/${vid}/effects/${fid}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+  return jobs.length;
+}
+
 async function patch(videoId, fxId, body) {
   const key = `${videoId}:${fxId}`;
   const merged = pending.get(key) || { params: {} };
@@ -541,17 +573,8 @@ async function patch(videoId, fxId, body) {
 
   clearTimeout(patchTimer);
   patchTimer = setTimeout(async () => {
-    const jobs = [...pending.entries()];
-    pending.clear();
     try {
-      for (const [k, payload] of jobs) {
-        const [vid, fid] = k.split(":");
-        await api(`/api/videos/${vid}/effects/${fid}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      }
+      await flushPatches();
     } catch (error) {
       return setStatus(error.message, true);
     }

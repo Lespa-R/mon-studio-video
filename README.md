@@ -72,8 +72,14 @@ se pose à la tête de lecture. « Partager » (**⌘E**) rend le MP4.
 | S | survol de la timeline (l'aperçu suit la souris) |
 | ⌘+ ⌘− · ⇧Z | zoom de la timeline · tout voir |
 | ⌘5 · ⌘4 · ⌃⌘1 · ⌃⌘2 | effets · inspecteur · bibliothèque · timeline |
-| V · ⌫ | activer/désactiver · supprimer l'effet sélectionné |
+| V · ⌫ | activer/désactiver · supprimer l'effet sélectionné (⌘Z le remet) |
+| ⌘Z · ⇧⌘Z | annuler · rétablir (effets, sous-titres, choix de découpe ; aussi ↶ ↷ au-dessus de l'aperçu) |
+| ⌘D | dupliquer l'effet sélectionné |
 | ⌘C ⌘V · ⌘I · ⌘E | copier/coller les effets · importer · partager |
+
+Double-clic sur le nom d'un clip, dans la bibliothèque : tu le renommes.
+L'annulation garde 50 étapes par clip, jusqu'à la fermeture du studio ; un
+rognage ou un montage par le texte repart de zéro (le fichier a changé).
 
 
 ### 1. Un projet, des clips
@@ -306,7 +312,9 @@ Le texte derrière toi reste parfaitement calé, même recadré en vertical.
 
 ### 6. Exporter
 
-**Rendre le MP4** produit la vidéo et affiche un lien de téléchargement. Tu peux
+**Rendre le MP4** produit la vidéo. L'avancement s'affiche aussi dans le titre
+de l'onglet (utile depuis une autre fenêtre) ; à la fin, **Ouvrir** la lance
+dans QuickTime et **Afficher dans le Finder** la montre dans `renders/`. Tu peux
 continuer à modifier pendant le rendu : il utilise l'état au moment du clic.
 
 ### 7. Promos de sites (motion design Remotion)

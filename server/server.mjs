@@ -16,6 +16,7 @@ import { buildTracks } from "../lib/tracking.mjs";
 import { normaliseTrim, shiftForTrim } from "../lib/trim.mjs";
 import { normaliseCuts, keptSegments, keptLength, localOf, settleCuts } from "../lib/textcut.mjs";
 import { SENSITIVITIES, normaliseShots, shotName } from "../lib/shots.mjs";
+import { makeHistory } from "../lib/history.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
@@ -377,6 +378,16 @@ const storage = makeStorage({
   },
 });
 
+// ------------------------------------------------------------ undo / redo
+// lib/history.mjs: every edit of a clip's effects, subtitles or cut-out
+// choice first saves what the clip looked like, so ⌘Z can put it back.
+
+const history = makeHistory();
+const EDIT_LABELS = {
+  "effects:POST": "ajout d'effet", "effects:paste": "collage d'effets", "effects:PATCH": "réglage d'effet",
+  "effects:DELETE": "suppression d'effet", captions: "sous-titres", matte: "choix de découpe",
+};
+
 // ------------------------------------------------------------ transcript
 // Montage par le texte works on the ORIGINAL footage: the file kept by a trim,
 // or the clip itself while it has never been trimmed. Its Whisper transcript
@@ -583,6 +594,7 @@ async function removeVideo(res, id) {
   const { project, video } = store.locate(id);
   if (!video) return send(res, 404, { error: "unknown video" });
   project.videos = project.videos.filter((v) => v.id !== id);
+  history.forget(id);
   await dropMedia(video);
   if (store.state.activeVideo === id) store.state.activeVideo = null;
   await saveState();
@@ -645,6 +657,17 @@ async function handleApi(req, res, url) {
   if (section === "storage") return storage.handleApi(req, res, id);
 
   if (section === "promos") return promos.handleApi(req, res, parts);
+
+  // Open a finished render (QuickTime) or show it in the Finder.
+  if (section === "renders" && id && sub === "open" && req.method === "POST") {
+    const { reveal = false } = await readJson(req);
+    const name = path.basename(id);
+    if (!/^[\w.-]+\.mp4$/.test(name) || !fs.existsSync(path.join(RENDERS, name))) {
+      return send(res, 404, { error: "rendu introuvable" });
+    }
+    spawn("open", reveal ? ["-R", path.join(RENDERS, name)] : [path.join(RENDERS, name)], { stdio: "ignore" });
+    return send(res, 200, { ok: true });
+  }
 
   if (section === "jobs" && req.method === "GET") {
     const job = jobs.get(id);
@@ -817,6 +840,31 @@ async function handleApi(req, res, url) {
 
     const video = findVideo(id);
     if (!video) return send(res, 404, { error: "unknown video" });
+
+    // rename -----------------------------------------------------------------
+    if (req.method === "PATCH" && !sub) {
+      const { name } = await readJson(req);
+      const trimmed = String(name ?? "").trim().slice(0, 120);
+      if (!trimmed) return send(res, 400, { error: "Le nom ne peut pas être vide." });
+      video.name = trimmed;
+      await saveState();
+      return send(res, 200, { video });
+    }
+
+    // undo / redo ------------------------------------------------------------
+    if ((sub === "undo" || sub === "redo") && req.method === "POST") {
+      const label = history.travel(video, sub);
+      if (!label) return send(res, 200, { done: false });
+      await saveState();
+      return send(res, 200, { done: true, label });
+    }
+    if (sub === "history" && req.method === "GET") {
+      return send(res, 200, history.peek(video.id));
+    }
+    if (req.method !== "GET" && (sub === "effects" || sub === "captions" || sub === "matte")) {
+      const what = sub === "effects" ? `effects:${subId === "paste" ? "paste" : req.method}` : sub;
+      history.remember(video, `${sub}:${subId || ""}:${req.method}`, EDIT_LABELS[what] || "modification");
+    }
 
     // effects -------------------------------------------------------------
     if (sub === "effects") {
@@ -1033,6 +1081,8 @@ async function handleApi(req, res, url) {
         return send(res, 409, { error: "Ce clip est en cours de traitement : réessaie dans un instant." });
       }
       trimsInFlight.add(video.id);
+      // The saved steps are timed on the old cut: they cannot come back.
+      history.forget(video.id);
       const job = startJob("trim", async (j) => {
         try {
           j.message = "Découpe de la vidéo…";

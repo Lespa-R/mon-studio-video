@@ -56,6 +56,7 @@ lib/tracking.mjs       detections → one smooth track per person; follow paths 
 lib/trim.mjs           trimming: shift effects / subtitles when the cut moves (pure)
 lib/textcut.mjs        montage par le texte: transcript tokens, removed passages, time maps,
                        Whisper output parsing (pure, no imports — the UI loads it too, as a module)
+lib/history.mjs        undo / redo of a clip's effects, subtitles, cut-out choice (in memory)
 lib/shots.mjs          splitting a rush into shots: shot list clean-up, clip names (pure)
 lib/storage.mjs        disk usage: sorts every file into a kind, says what may be deleted (pure)
 lib/captions.mjs       subtitles: words → lines, edits, SRT in/out, chunking (pure)
@@ -203,6 +204,15 @@ Skimming (S), J/K/L, arrows, ⌘±/⇧Z zoom, ⌘4 / ⌃⌘1 / ⌃⌘2 areas, V,
 `SHORTCUTS` (app-fcp.js), which « ⌨ Raccourcis » / ? shows.
 `test/ui.test.mjs` opens every tab in a headless Chrome and fails on any
 script error: run `npm test` after touching the UI.
+
+## Undo
+
+Every non-GET request on `/api/videos/:id/(effects|captions|matte)` is
+recorded by `history.remember()` in server.mjs **before** the route runs —
+a new clip-editing route under those paths is undoable for free; one
+elsewhere is not. Trims forget the clip's history (its times changed).
+The UI calls `flushPatches()` before undoing so a debounced edit is not
+lost behind the step.
 
 ## Gotchas already paid for
 
