@@ -35,8 +35,12 @@ function ccNote(text, warn = false) {
   el.textContent = text;
   el.classList.toggle("warn", warn);
 }
-const CC_INFO = "La transcription se fait sur ce Mac avec la reconnaissance vocale d'Apple : rien ne part sur Internet. " +
+// Whisper when it is installed (no macOS permission); Apple's recogniser otherwise.
+const whisperOn = () => Boolean(state.options?.whisper?.available);
+const CC_INFO_APPLE = "La transcription se fait sur ce Mac avec la reconnaissance vocale d'Apple : rien ne part sur Internet. " +
   "La première fois, macOS demande l'autorisation pour « Mon Studio – Transcription ».";
+const CC_INFO_WHISPER = "La transcription se fait sur ce Mac avec Whisper : rien ne part sur Internet, aucune autorisation à donner. " +
+  "Pour couper des mots ou des silences, utilise « ✎ Texte » sous l'aperçu.";
 
 // `force` reloads the lines from the clip; otherwise a redraw while the
 // user is typing would throw away what they typed.
@@ -66,7 +70,7 @@ function drawCaptions(force = false) {
   const hasEffect = v.effects.some((e) => e.type === "captions" && e.enabled !== false);
   if (!v.hasAudio) ccNote("Ce clip n'a pas de son : importe un fichier SRT ou ajoute les lignes à la main.");
   else if (ccCues.length && !hasEffect) ccNote("Ces sous-titres ne s'affichent pas : ajoute ou active l'effet « Sous-titres » dans l'onglet Effets.", true);
-  else ccNote(ccCues.length ? `${ccCues.length} lignes. Modifie le texte ou les temps ; le style se règle dans l'effet « Sous-titres ».` : CC_INFO);
+  else ccNote(ccCues.length ? `${ccCues.length} lignes. Modifie le texte ou les temps ; le style se règle dans l'effet « Sous-titres ».` : (whisperOn() ? CC_INFO_WHISPER : CC_INFO_APPLE));
 
   list.innerHTML = "";
   if (!ccCues.length) {
@@ -178,7 +182,9 @@ $("#cc-gen").onclick = async () => {
   }))) return;
   const button = $("#cc-gen");
   button.disabled = true;
-  ccNote("Transcription en cours sur ce Mac… Si macOS demande l'autorisation pour « Mon Studio – Transcription », accepte-la.");
+  ccNote(whisperOn()
+    ? "Transcription Whisper en cours sur ce Mac…"
+    : "Transcription en cours sur ce Mac… Si macOS demande l'autorisation pour « Mon Studio – Transcription », accepte-la.");
   $("#prog").hidden = false;
   try {
     const { job } = await api(`/api/videos/${v.id}/captions/generate`, {

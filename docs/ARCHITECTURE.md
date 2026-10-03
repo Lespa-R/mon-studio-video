@@ -472,6 +472,37 @@ clip lands around 4–6 minutes for the cut-out (once, then cached) and ~5 minut
 per render. Drop the clip's `matteOptions.quality` in `studio.json` to
 `balanced` for a faster first pass.
 
+## Montage par le texte (Whisper)
+
+`POST /api/videos/:id/transcript` runs `media.transcribeWhisper` on the
+ORIGINAL (the file a trim keeps, else the clip): ffmpeg → 16 kHz WAV, a 10 ms
+loudness track, Silero VAD speech segments, then `whisper-cli -ml 1 -sow -ojf
+-nfa -dtw large.v3.turbo` (one segment per word, DTW token times).
+`parseWhisperWords` places each word around its token marks (Whisper's own
+segment times can be a second off), `fitToSpeech` drops words heard outside
+any speech and known inventions (« Sous-titrage Société Radio-Canada »). The
+result is cached in `media/<id>-transcript.json`.
+
+The editor (`app-textcut.js`, `lib/textcut.mjs › tokens`) shows words, pauses
+(no voice) and hesitations (voice, no word). Removing a word removes it plus
+half of each neighbouring gap. Cuts are posted to `POST …/trim` as `cuts`;
+the server settles each edge on the quietest 10 ms within ±100 ms, re-cuts the
+working copy from the kept segments, and `shiftForTrim` moves effects and
+subtitle words through the time map (words in removed passages leave the line;
+the line remembers itself in `full` and comes back if the passage does).
+Subtitles generated with Whisper reuse the transcript, mapped onto the
+working copy (`localWords`).
+
+## Rush → plans (PySceneDetect)
+
+`POST /api/videos/:id/shots` runs `tools/scenes.py` (AdaptiveDetector, so a
+pan or someone walking by is not a cut) in `.venv`, in slices for progress;
+`normaliseShots` orders them and folds shots under 0.3 s into a neighbour.
+`GET …/frame?t=` serves one cached JPEG per card (`.transcode-cache/frames`,
+keyed by clip length so a trim refreshes them). `POST …/split` cuts each kept
+shot from the working copy (`cutClip`, frame-exact re-encode) and registers it
+as a new clip right after the rush (`registerClip({ after })`).
+
 ## Known limits
 
 - **One person.** `VNGeneratePersonSegmentationRequest` returns a single

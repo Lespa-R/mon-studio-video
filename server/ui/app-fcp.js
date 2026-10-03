@@ -327,7 +327,7 @@ function showShortcuts() {
 $("#keys-help").onclick = showShortcuts;
 
 document.addEventListener("keydown", async (e) => {
-  if (!$("#dlg").hidden || !$("#trim").hidden || $("#view-edit").hidden) return;
+  if (!$("#dlg").hidden || !$("#trim").hidden || !$("#tx").hidden || !$("#shots").hidden || $("#view-edit").hidden) return;
   const el = document.activeElement;
   const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(el?.tagName) && el.type !== "range" && el.type !== "checkbox";
   if (typing) return;

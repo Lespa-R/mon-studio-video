@@ -165,10 +165,10 @@ Balayage.
 Onglet **Sous-titres**, à côté de *Effets* :
 
 1. Choisis la langue parlée, clique **Générer**. La transcription se fait **sur
-   ton Mac** avec la reconnaissance vocale d'Apple : rien ne part sur Internet,
-   pas de compte, pas d'API. La première fois, macOS demande l'autorisation
-   pour « Mon Studio – Transcription » : accepte. (Refusée par erreur ?
-   Réglages Système › Confidentialité et sécurité › Reconnaissance vocale.)
+   ton Mac** avec **Whisper** (whisper.cpp, voir [Installer Whisper](#installer-whisper)) :
+   rien ne part sur Internet, pas de compte, aucune autorisation macOS. Sans
+   Whisper, le studio prend la reconnaissance vocale d'Apple ; la première fois,
+   macOS demande alors l'autorisation pour « Mon Studio – Transcription ».
 2. Corrige les lignes : le texte, et le début / la fin de chacune. `▶` ou un
    clic dans le texte place l'aperçu sur la ligne ; `+` en ajoute une après,
    `×` la supprime. La ligne en cours de lecture est surlignée en vert.
@@ -179,6 +179,60 @@ Onglet **Sous-titres**, à côté de *Effets* :
 
 **Importer…** accepte un fichier SRT ou VTT ; **Exporter .srt** télécharge les
 sous-titres corrigés (pour YouTube, LinkedIn…).
+
+### Montage par le texte (retirer mots, silences, hésitations)
+
+**✎ Texte**, sous l'aperçu, ouvre la transcription de ta vidéo d'origine
+(**Transcrire avec Whisper** la première fois : quelques secondes par minute).
+
+- Le texte s'affiche mot à mot, avec **⏸** pour les silences et **≈** pour le
+  son sans texte : un « euh », une hésitation, un faux départ (Whisper ne les
+  écrit pas). Clic sur un mot : tu l'entends.
+- **Sélectionne des mots puis ⌫** : ils sont barrés, donc retirés. ⌫ sur une
+  sélection déjà barrée la remet. Clic sur un ⏸ ou un ≈ : le raccourcir / le remettre.
+- **Nettoyer** raccourcit d'un coup les silences trop longs (réglable) et retire
+  les « euh » écrits ; coche **hésitations ≈** pour les retirer aussi — écoute
+  avant, un ≈ est parfois un vrai mot que Whisper n'a pas compris.
+- **Écouter le montage** joue la vidéo en sautant ce qui est retiré.
+  **Appliquer au clip** fait les coupes. Les bords sont posés au moment le plus
+  calme, avec un fondu de 10 ms : pas de clic.
+- Comme pour le rognage, **l'original est conservé** : rouvre la fenêtre pour
+  remettre un passage, ou **Tout remettre**. Les effets et les sous-titres
+  suivent ; les mots retirés disparaissent aussi des sous-titres.
+
+### Découper un rush en plans
+
+**▦ Plans**, sous l'aperçu : **Détecter les plans** repère chaque changement de
+plan du clip (PySceneDetect, sur ton Mac ; une vingtaine de secondes de 4K en
+3 s). Chaque plan s'affiche avec son image et ses temps :
+
+- clic sur l'image : tu vois le plan ;
+- décoche ceux à laisser de côté ; **⊕ avec le suivant** réunit deux plans
+  coupés en trop ;
+- **Sensibilité** *Fine* trouve plus de plans, *Large* moins ; **Plan le plus
+  court** évite les miettes.
+
+**Créer les clips** : chaque plan gardé devient un clip (« nom — plan 3 »),
+rangé juste après le rush. Le rush lui-même ne bouge pas.
+
+Installation (une fois) :
+
+```bash
+brew install python@3.12
+cd ~/Code/mon-studio-video && /opt/homebrew/opt/python@3.12/bin/python3.12 -m venv .venv && .venv/bin/pip install scenedetect
+```
+
+### Installer Whisper
+
+```bash
+brew install whisper-cpp
+```
+
+Puis, dans `models/` (dossier du studio, exclu de git) :
+`ggml-large-v3-turbo-q8_0.bin` (874 Mo) et `ggml-silero-v5.1.2.bin` (0,9 Mo,
+détecteur de voix : évite que Whisper invente du texte sur la musique), depuis
+huggingface.co/ggerganov/whisper.cpp et huggingface.co/ggml-org/whisper-vad.
+Relance le studio : il les détecte tout seul.
 
 ### Ta charte graphique
 

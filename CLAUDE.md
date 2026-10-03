@@ -43,7 +43,7 @@ server/loopback.cjs    preloaded into Remotion Studio so it listens on 127.0.0.1
 server/ui/index.html   markup; styles.css; app-*.js = classic scripts sharing one
                        global scope, loaded in order (no build, no modules):
                        core (dialogs, clips, inspector, preview, timeline) · storage ·
-                       trim · editor (subtitles, drag, projects, presets) · library ·
+                       trim · textcut (montage par le texte) · shots (rush → plans) · editor (subtitles, drag, projects, presets) · library ·
                        promos · pages (tabs, format, brand) · main (wiring, layout, boot) ·
                        fcp (Final Cut habits: timecode, skimming, zoom, areas,
                        effects browser, waveform, shortcuts)
@@ -54,6 +54,9 @@ lib/effects-captions.mjs the "Sous-titres" effect (draws video.captions)
 lib/effects-people.mjs name tags that follow each tracked person
 lib/tracking.mjs       detections → one smooth track per person; follow paths (pure)
 lib/trim.mjs           trimming: shift effects / subtitles when the cut moves (pure)
+lib/textcut.mjs        montage par le texte: transcript tokens, removed passages, time maps,
+                       Whisper output parsing (pure, no imports — the UI loads it too, as a module)
+lib/shots.mjs          splitting a rush into shots: shot list clean-up, clip names (pure)
 lib/storage.mjs        disk usage: sorts every file into a kind, says what may be deleted (pure)
 lib/captions.mjs       subtitles: words → lines, edits, SRT in/out, chunking (pure)
 lib/brand.mjs          brand kits: colour tokens, fonts, logo (pure)
@@ -61,12 +64,13 @@ lib/compose.mjs        clip + effects + format → HyperFrames HTML (pure)
 lib/format.mjs         output canvas, and how the clip is placed on it (pure)
 lib/timing.mjs         an effect's window on the clip (pure)
 lib/store.mjs          studio.json (v6): folders → projects (+format, brandId) → clips → effects; presets; brands; fonts
-lib/media.mjs          ffprobe, face detection, person matte (async)
+lib/media.mjs          ffprobe, face detection, person matte, Whisper transcription, cuts (async)
 lib/guard.mjs          Host/Origin guard
 lib/promos.mjs         promos: scene catalogue, storyboard validation, timing, warnings, brand.json (pure)
 tools/*.swift          Vision helpers: facedet (face box), personmatte (cut-out → RGBA);
                        transcribe.swift → tools/Transcribe.app (on-device speech → timed words);
                        persontrack (bodies + faces, several people, N samples/s)
+tools/scenes.py        PySceneDetect shot detection, run with .venv/bin/python (Python 3.12)
 bin/behind.mjs         one-shot CLI
 test/*.test.mjs        node --test
 docs/ARCHITECTURE.md   the long-form technical reference
@@ -241,6 +245,22 @@ script error: run `npm test` after touching the UI.
   (`fx.trimmedFrom`, `captions.offcuts`, `cue.full`) so widening restores them.
   The matte, people tracks and face are recomputed after a trim.
 
+- **Montage par le texte = trim with holes.** `video.trim.cuts` are passages
+  removed inside [start, end], in the original's time; `lib/textcut.mjs`
+  maps times (`keptSegments`, `localOf`, `sourceOf`) and `shiftForTrim` takes
+  `{ start, end, cuts }`. `cutClip({ segments })` joins them with one
+  trim/concat filter (10 ms audio fades). The Whisper transcript lives in
+  `media/<id>-transcript.json` (original's time, with a 10 ms loudness track
+  that `settleCuts` uses to put cut edges in the quiet), deleted when the
+  original is freed (`commitTrim`).
+- **Whisper's own word times are wrong by up to a second** after a hesitation
+  it does not write. Words are placed on the DTW token times
+  (`-dtw large.v3.turbo`, which needs `-nfa`), checked against the Silero VAD
+  (`whisper-vad-speech-segments`, centiseconds). Don't run `whisper-cli
+  --vad`: its token times are then on the VAD-compressed timeline. Gaps with
+  voice but no word are shown as « ≈ » hesitations, never cut by default (an
+  acronym like "H&M" can look like one).
+
 - **`store.save()` chains writes but never lets one failure poison the
   chain** (a rejected link used to make every later save fail silently until
   restart). Keep the `.catch(() => {})` before `.then`.
@@ -256,9 +276,13 @@ script error: run `npm test` after touching the UI.
   Promos (2026-09-28, asked for by the user) are not that: generated motion
   design scenes, not a chain of filmed clips.
 - **Local first.** No accounts, no cloud; the server listens on 127.0.0.1 only.
-  Subtitles use Apple's on-device recogniser (`requiresOnDeviceRecognition`),
-  not a speech API.
-- **Zero runtime dependencies.** No `npm install`, no build step. Remotion
+  Subtitles use Whisper (whisper.cpp from Homebrew, models in `models/`,
+  added 2026-10-03 at the user's request) and fall back to Apple's on-device
+  recogniser when it is missing — never a speech API.
+- **Zero runtime dependencies.** No `npm install`, no build step. Optional
+  local AI tools sit outside node: whisper.cpp (Homebrew) and PySceneDetect in
+  `.venv` (2026-10-03, asked for by the user); the studio checks for each and
+  says how to install it when missing. Remotion
   stays in the separate `~/Code/promos` workspace.
 - **Name: « Mon Studio Vidéo »** (renamed from « Mon Studio HyperFrame » on
   2026-09-29: folder `~/Code/mon-studio-video`, repo, launcher, UI). HyperFrames

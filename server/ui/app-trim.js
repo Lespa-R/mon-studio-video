@@ -60,7 +60,9 @@ $("#trim-open").onclick = () => {
   setTrim(v.trim ? v.trim.start : 0, v.trim ? v.trim.end : v.duration);
   video.onloadedmetadata = () => { video.currentTime = trimState.start; };
   $("#trim-reset").hidden = !v.trim;
-  $("#trim-msg").textContent = "L'original est conservé : tu pourras rallonger ou revenir à la vidéo entière. Les effets et les sous-titres suivent la coupe.";
+  const removed = v.trim?.cuts?.length || 0;
+  $("#trim-msg").textContent = "L'original est conservé : tu pourras rallonger ou revenir à la vidéo entière. Les effets et les sous-titres suivent la coupe." +
+    (removed ? ` Les ${removed} passage${removed > 1 ? "s" : ""} retiré${removed > 1 ? "s" : ""} au montage texte le reste${removed > 1 ? "nt" : ""} (« Vidéo entière » les remet).` : "");
   $("#trim").hidden = false;
   requestAnimationFrame(trimTick);
 };

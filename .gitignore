@@ -23,3 +23,9 @@ render-*.html
 .studio-port
 tools/Transcribe.app/
 tools/persontrack
+
+# Whisper models (downloaded, ~0.9 GB)
+models/
+
+# PySceneDetect virtualenv (Python 3.12, rebuilt with: python3.12 -m venv .venv && .venv/bin/pip install scenedetect)
+.venv/

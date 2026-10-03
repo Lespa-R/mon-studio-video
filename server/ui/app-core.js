@@ -565,7 +565,7 @@ async function patch(videoId, fxId, body) {
 function clearFrame() {
   $("#frame").innerHTML = '<div class="empty">Ajoute une vidéo pour commencer.</div>';
   $("#tl").hidden = true;
-  for (const id of ["play", "restart", "refresh", "render", "trim-open", "step-back", "step-fwd"]) $("#" + id).disabled = true;
+  for (const id of ["play", "restart", "refresh", "render", "trim-open", "tx-open", "sh-open", "step-back", "step-fwd"]) $("#" + id).disabled = true;
 }
 
 // The container must be passed in: the library has its own frame, and a
@@ -642,7 +642,7 @@ async function preview(opts = {}) {
   fitFrame(iframe, v, frame);
   playing = false;
   $("#play").textContent = "▶";
-  for (const id of ["play", "restart", "refresh", "render", "trim-open", "step-back", "step-fwd"]) $("#" + id).disabled = false;
+  for (const id of ["play", "restart", "refresh", "render", "trim-open", "tx-open", "sh-open", "step-back", "step-fwd"]) $("#" + id).disabled = false;
   // The iframe tells us once it has actually landed on `at`.
   setTimeout(() => setBusy(false), 2500);
 }

@@ -14,6 +14,8 @@ import { Store, newId } from "../lib/store.mjs";
 import { compose, needsMatte, needsTracking } from "../lib/compose.mjs";
 import { buildTracks } from "../lib/tracking.mjs";
 import { normaliseTrim, shiftForTrim } from "../lib/trim.mjs";
+import { normaliseCuts, keptSegments, keptLength, localOf, settleCuts } from "../lib/textcut.mjs";
+import { SENSITIVITIES, normaliseShots, shotName } from "../lib/shots.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
@@ -74,6 +76,8 @@ function mediaNames(video) {
     bg: `${video.id}-bg${video.ext}`,
     fg: `${video.id}-fg.webm`,
     people: `${video.id}-people.json`,
+    // Whisper's words, in the original's time (montage par le texte).
+    transcript: `${video.id}-transcript.json`,
     // The untouched original, kept once the clip has been trimmed.
     orig: video.trim ? `${video.id}-orig${video.trim.ext}` : null,
   };
@@ -304,7 +308,7 @@ const readJson = (req) =>
   });
 
 const MIME = {
-  ".html": "text/html", ".css": "text/css", ".js": "text/javascript",
+  ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".mjs": "text/javascript",
   ".json": "application/json", ".mp4": "video/mp4", ".mov": "video/quicktime",
   ".webm": "video/webm", ".m4v": "video/mp4", ".svg": "image/svg+xml",
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
@@ -349,6 +353,9 @@ async function serveFile(req, res, file) {
 // positions from it any more.
 function commitTrim(video) {
   delete video.trim;
+  // The transcript was timed on the original, which is gone.
+  fsp.rm(path.join(MEDIA, mediaNames(video).transcript), { force: true }).catch(() => {});
+  delete video.transcriptLang;
   for (const fx of video.effects) delete fx.trimmedFrom;
   if (video.captions) {
     delete video.captions.offcuts;
@@ -359,15 +366,75 @@ function commitTrim(video) {
 const storage = makeStorage({
   ROOT, MEDIA, RENDERS, store, send, readJson, saveState,
   promos: () => promos,
-  busy: (id) => mattesInFlight.has(id) || peopleInFlight.has(id) || trimsInFlight.has(id),
+  busy: (id) => mattesInFlight.has(id) || peopleInFlight.has(id) || trimsInFlight.has(id) || transcriptsInFlight.has(id),
   forget(it) {
     const video = it.videoId ? findVideo(it.videoId) : null;
     if (video && it.kind === "matte") delete video.matteSignature;
     if (video && it.kind === "people") { peopleCache.delete(video.id); delete video.peopleCount; }
+    if (video && it.kind === "transcript") delete video.transcriptLang;
     if (video && it.kind === "original") commitTrim(video);
     if (it.kind === "asset" && it.font) store.state.fonts = (store.state.fonts || []).filter((f) => f.file !== it.name);
   },
 });
+
+// ------------------------------------------------------------ transcript
+// Montage par le texte works on the ORIGINAL footage: the file kept by a trim,
+// or the clip itself while it has never been trimmed. Its Whisper transcript
+// (words, speech, a 10 ms loudness track for placing cut edges) is cached in
+// media/<id>-transcript.json; trims never change it.
+
+const sourceOf = (video) => ({
+  file: path.join(MEDIA, video.trim ? mediaNames(video).orig : mediaNames(video).bg),
+  name: video.trim ? mediaNames(video).orig : mediaNames(video).bg,
+  duration: video.trim ? video.trim.source : video.duration,
+});
+const cutOf = (video) => video.trim
+  ? { start: video.trim.start, end: video.trim.end, cuts: video.trim.cuts || [] }
+  : { start: 0, end: video.duration, cuts: [] };
+
+async function readTranscript(video) {
+  try {
+    return JSON.parse(await fsp.readFile(path.join(MEDIA, mediaNames(video).transcript), "utf8"));
+  } catch { return null; }
+}
+
+const transcriptsInFlight = new Map(); // videoId -> promise
+async function ensureTranscript(video, lang, job) {
+  const have = await readTranscript(video);
+  if (have && have.lang === lang) return have;
+  if (transcriptsInFlight.has(video.id)) return transcriptsInFlight.get(video.id);
+  const run = (async () => {
+    job.message = "Transcription Whisper sur ce Mac…";
+    const src = sourceOf(video);
+    const r = await media.transcribeWhisper(src.file, {
+      lang,
+      workDir: path.join(ROOT, ".transcode-cache", `whisper-${video.id}-${Date.now()}`),
+      onProgress: (p) => { job.progress = p * 0.95; },
+    });
+    const transcript = {
+      engine: "whisper", lang, duration: src.duration,
+      words: r.words, speech: r.speech,
+      hop: 0.01, energy: Buffer.from(r.energy).toString("base64"),
+      at: new Date().toISOString(),
+    };
+    if (!findVideo(video.id)) throw new Error("clip supprimé pendant la transcription");
+    await writeAtomic(path.join(MEDIA, mediaNames(video).transcript), JSON.stringify(transcript));
+    video.transcriptLang = lang;
+    await saveState();
+    return transcript;
+  })().finally(() => transcriptsInFlight.delete(video.id));
+  transcriptsInFlight.set(video.id, run);
+  return run;
+}
+
+// The transcript's words on the working copy's timeline (the removed
+// passages and the trimmed ends taken out).
+function localWords(video, transcript) {
+  const segs = keptSegments(cutOf(video));
+  return transcript.words
+    .filter((w) => localOf(segs, (w.s + w.e) / 2).kept)
+    .map((w) => ({ w: w.w, s: localOf(segs, w.s).t, e: localOf(segs, w.e).t }));
+}
 
 // ------------------------------------------------------------------- routes
 
@@ -403,7 +470,9 @@ async function importClip(file, original) {
   return { video: await registerClip({ id, target, original, ext, projectId: null }) };
 }
 
-async function registerClip({ id, target, original, ext, projectId }) {
+// `after` puts the new clip right after that one (a rush's shots); otherwise
+// it goes at the end and becomes the selected clip.
+async function registerClip({ id, target, original, ext, projectId, after = null }) {
   let info;
   try {
     info = await media.probe(target);
@@ -430,8 +499,12 @@ async function registerClip({ id, target, original, ext, projectId }) {
   };
 
   const project = store.project(projectId) || store.activeProject();
-  project.videos.push(video);
-  store.state.activeVideo = video.id;
+  const at = after ? project.videos.findIndex((v) => v.id === after) : -1;
+  if (at >= 0) project.videos.splice(at + 1, 0, video);
+  else {
+    project.videos.push(video);
+    store.state.activeVideo = video.id;
+  }
   await saveState();
   return video;
 }
@@ -497,8 +570,9 @@ async function addAsset(req, res) {
 }
 
 async function dropMedia(video) {
-  const { bg, fg, people, orig } = mediaNames(video);
+  const { bg, fg, people, orig, transcript } = mediaNames(video);
   if (orig) await fsp.rm(path.join(MEDIA, orig), { force: true });
+  await fsp.rm(path.join(MEDIA, transcript), { force: true });
   await fsp.rm(path.join(MEDIA, bg), { force: true });
   await fsp.rm(path.join(MEDIA, fg), { force: true });
   await fsp.rm(path.join(MEDIA, people), { force: true });
@@ -527,6 +601,9 @@ async function handleApi(req, res, url) {
         fonts: SYSTEM_FONTS.map(({ value, label }) => ({ value, label })),
         colorRoles: COLOR_ROLES,
         languages: LANGUAGES,
+        whisper: media.whisperStatus(),
+        scenes: media.scenesStatus(),
+        sensitivities: SENSITIVITIES,
       },
       defaultBrand: DEFAULT_BRAND,
     });
@@ -842,15 +919,114 @@ async function handleApi(req, res, url) {
       return send(res, 200, { video });
     }
 
+    // transcript (montage par le texte) ---------------------------------------
+    if (sub === "transcript" && req.method === "GET") {
+      const t = await readTranscript(video);
+      const src = sourceOf(video);
+      return send(res, 200, {
+        transcript: t ? { engine: t.engine, lang: t.lang, duration: t.duration, words: t.words, speech: t.speech } : null,
+        cut: cutOf(video),
+        source: { url: `/media/${src.name}`, duration: src.duration },
+        whisper: media.whisperStatus(),
+      });
+    }
+    if (sub === "transcript" && req.method === "POST") {
+      const { lang = video.captions?.lang || "fr-FR", force = false } = await readJson(req);
+      if (!LANGUAGES.some((l) => l.value === lang)) return send(res, 400, { error: "langue inconnue" });
+      if (!video.hasAudio) return send(res, 400, { error: "Ce clip n'a pas de son à transcrire." });
+      if (!media.whisperStatus().available) return send(res, 400, { error: "Whisper n'est pas installé sur ce Mac." });
+      if (force) await fsp.rm(path.join(MEDIA, mediaNames(video).transcript), { force: true });
+      const job = startJob("transcript", async (j) => {
+        const t = await ensureTranscript(video, lang, j);
+        return { words: t.words.length };
+      });
+      return send(res, 200, { job });
+    }
+
+    // shots (découper un rush en plans) ----------------------------------------
+    if (sub === "shots" && req.method === "POST") {
+      const { sensitivity = "normal", minShot = 1 } = await readJson(req);
+      if (!SENSITIVITIES.some((x) => x.value === sensitivity)) return send(res, 400, { error: "sensibilité inconnue" });
+      if (!media.scenesStatus().available) return send(res, 400, { error: "PySceneDetect n'est pas installé (voir le README)." });
+      const job = startJob("shots", async (j) => {
+        j.message = "Recherche des plans…";
+        const r = await media.detectScenes(path.join(MEDIA, mediaNames(video).bg), {
+          sensitivity, minShot: Math.min(10, Math.max(0.3, Number(minShot) || 1)),
+          onProgress: (p) => { j.progress = p; },
+        });
+        return { scenes: normaliseShots(r.scenes, video.duration), duration: video.duration };
+      });
+      return send(res, 200, { job });
+    }
+    // A frame of the clip, for the shot cards. Cached by clip length, so a
+    // trim (a new working file) gets new pictures.
+    if (sub === "frame" && req.method === "GET") {
+      const t = Math.min(video.duration, Math.max(0, Number(url.searchParams.get("t")) || 0));
+      const file = path.join(ROOT, ".transcode-cache", "frames",
+        `${video.id}-${Math.round(video.duration * 1000)}-${Math.round(t * 1000)}.jpg`);
+      if (!fs.existsSync(file)) await media.frameJpeg(path.join(MEDIA, mediaNames(video).bg), t, file);
+      return serveFile(req, res, file);
+    }
+    // Each shot becomes a clip of its own, placed after the rush. The rush
+    // itself is not touched.
+    if (sub === "split" && req.method === "POST") {
+      const body = await readJson(req);
+      const shots = normaliseShots(body.shots, video.duration);
+      if (!shots.length) return send(res, 400, { error: "Aucun plan choisi." });
+      if (trimsInFlight.has(video.id)) return send(res, 409, { error: "Ce clip est en cours de traitement : réessaie dans un instant." });
+      const projectId = store.locate(video.id).project?.id;
+      const numbers = Array.isArray(body.numbers) ? body.numbers : [];
+      const job = startJob("split", async (j) => {
+        const created = [];
+        let after = video.id;
+        for (const [i, shot] of shots.entries()) {
+          j.message = `Plan ${i + 1} sur ${shots.length}…`;
+          const id = newId("vid_");
+          const target = path.join(MEDIA, `${id}-bg.mp4`);
+          await media.cutClip(path.join(MEDIA, mediaNames(video).bg), target, {
+            start: shot.start, duration: shot.end - shot.start,
+            onProgress: (p) => { j.progress = (i + p) / shots.length; },
+          });
+          if (!findVideo(video.id)) { await fsp.rm(target, { force: true }); throw new Error("clip supprimé pendant le découpage"); }
+          const clip = await registerClip({
+            id, target, ext: ".mp4", projectId, after,
+            original: shotName(video.name, Number(numbers[i]) || i + 1),
+          });
+          after = clip.id;
+          created.push(clip.id);
+        }
+        return { created };
+      });
+      return send(res, 200, { job });
+    }
+
     // trim ------------------------------------------------------------------
     // Keep [start, end] of the original. The original stays on disk, so the
     // cut can be moved or undone; effects and subtitles are shifted to match.
+    //
+    // `cuts` (optional) are passages removed inside [start, end] by the text
+    // editor; left out, the current ones stay. Their edges are moved to the
+    // quietest moment nearby (the transcript's loudness track).
     if (sub === "trim" && req.method === "POST") {
       const body = await readJson(req);
       const sourceDuration = video.trim ? video.trim.source : video.duration;
-      const from = video.trim ? { start: video.trim.start, end: video.trim.end } : { start: 0, end: video.duration };
-      const to = body.reset ? { start: 0, end: sourceDuration } : normaliseTrim(body, sourceDuration);
-      if (Math.abs(to.start - from.start) < 0.01 && Math.abs(to.end - from.end) < 0.01) {
+      const from = cutOf(video);
+      let to;
+      if (body.reset) {
+        to = { start: 0, end: sourceDuration, cuts: [] };
+      } else {
+        const range = normaliseTrim(body.start === undefined && body.end === undefined ? from : body, sourceDuration);
+        let cuts = normaliseCuts(body.cuts !== undefined ? body.cuts : from.cuts, range.start, range.end);
+        if (body.cuts !== undefined && cuts.length) {
+          const t = await readTranscript(video);
+          const energy = t?.energy ? Buffer.from(t.energy, "base64") : null;
+          cuts = normaliseCuts(settleCuts(cuts, energy, t?.hop || 0.01), range.start, range.end);
+        }
+        to = { ...range, cuts };
+        if (keptLength(keptSegments(to)) < 0.5) return send(res, 400, { error: "Il ne resterait presque rien du clip." });
+      }
+      if (Math.abs(to.start - from.start) < 0.01 && Math.abs(to.end - from.end) < 0.01
+        && JSON.stringify(to.cuts) === JSON.stringify(from.cuts)) {
         return send(res, 200, { job: null, unchanged: true });
       }
       if (mattesInFlight.has(video.id) || trimsInFlight.has(video.id)) {
@@ -860,7 +1036,8 @@ async function handleApi(req, res, url) {
       const job = startJob("trim", async (j) => {
         try {
           j.message = "Découpe de la vidéo…";
-          const whole = to.start < 0.01 && to.end > sourceDuration - 0.01;
+          const whole = to.start < 0.01 && to.end > sourceDuration - 0.01 && !to.cuts.length;
+          const segments = keptSegments(to);
           const old = mediaNames(video);
           // First trim: the current file becomes the kept original.
           if (!video.trim) {
@@ -879,19 +1056,23 @@ async function handleApi(req, res, url) {
           } else {
             ext = ".mp4";
             await media.cutClip(origFile, path.join(MEDIA, `${video.id}-bg${ext}`), {
-              start: to.start, duration: to.end - to.start,
+              segments, duration: keptLength(segments), hasAudio: video.hasAudio,
               onProgress: (p) => { j.progress = p * 0.8; },
             });
           }
 
           const info = await media.probe(path.join(MEDIA, `${video.id}-bg${ext}`));
-          const shifted = shiftForTrim(video, from, { start: to.start, end: to.start + info.duration });
+          // Without removed passages, trust the file's own length (a cut
+          // lands on a frame); with them, the segments are the reference.
+          const shifted = shiftForTrim(video, from,
+            to.cuts.length ? to : { start: to.start, end: to.start + info.duration, cuts: [] });
           video.effects = shifted.effects;
           video.captions = shifted.captions;
           video.ext = ext;
           video.duration = info.duration;
           video.hasAudio = info.hasAudio;
-          video.trim = whole ? undefined : { ...video.trim, start: to.start, end: to.end };
+          video.trim = whole ? undefined : { ...video.trim, start: to.start, end: to.end, cuts: to.cuts };
+          if (video.trim && !video.trim.cuts.length) delete video.trim.cuts;
           if (!video.trim) delete video.trim;
 
           // Everything measured on the old frames is stale: the cut-out, the
@@ -906,7 +1087,7 @@ async function handleApi(req, res, url) {
           try { video.face = await media.detectFace(path.join(MEDIA, `${video.id}-bg${ext}`), 24); } catch { video.face = null; }
 
           await saveState();
-          return { duration: video.duration, clamped: shifted.clamped, dropped: shifted.dropped, whole };
+          return { duration: video.duration, clamped: shifted.clamped, dropped: shifted.dropped, whole, cuts: to.cuts.length };
         } catch (error) {
           // Never leave the clip without a working file: put back what was
           // there before this trim (the original is still on disk).
@@ -914,11 +1095,12 @@ async function handleApi(req, res, url) {
           if (!fs.existsSync(bgPath) && video.trim) {
             const origFile = path.join(MEDIA, mediaNames(video).orig);
             try {
-              if (from.start < 0.01 && from.end > sourceDuration - 0.01) {
+              if (from.start < 0.01 && from.end > sourceDuration - 0.01 && !from.cuts.length) {
                 await fsp.rename(origFile, bgPath);
                 delete video.trim;
               } else {
-                await media.cutClip(origFile, bgPath, { start: from.start, duration: from.end - from.start });
+                const segs = keptSegments(from);
+                await media.cutClip(origFile, bgPath, { segments: segs, duration: keptLength(segs), hasAudio: video.hasAudio });
               }
               await saveState();
             } catch { /* reported below */ }
@@ -955,9 +1137,24 @@ async function handleApi(req, res, url) {
       };
 
       if (req.method === "POST" && subId === "generate") {
-        const { lang = "fr-FR" } = await readJson(req);
+        const { lang = "fr-FR", engine } = await readJson(req);
         if (!LANGUAGES.some((l) => l.value === lang)) return send(res, 400, { error: "langue inconnue" });
         if (!video.hasAudio) return send(res, 400, { error: "Ce clip n'a pas de son à transcrire." });
+        // Whisper when it is installed (more accurate, no macOS permission);
+        // Apple's recogniser otherwise, or when asked for.
+        if (engine !== "apple" && media.whisperStatus().available) {
+          const job = startJob("captions", async (j) => {
+            const t = await ensureTranscript(video, lang, j);
+            const words = localWords(video, t);
+            if (!findVideo(video.id)) throw new Error("clip supprimé pendant la transcription");
+            const cues = groupWords(words);
+            video.captions = { lang, source: "whisper", cues };
+            const added = ensureEffect();
+            await saveState();
+            return { cues: cues.length, words: words.length, added };
+          });
+          return send(res, 200, { job });
+        }
         const job = startJob("captions", async (j) => {
           j.message = "Transcription sur ce Mac…";
           const words = await media.transcribe(path.join(MEDIA, mediaNames(video).bg), {
@@ -1110,6 +1307,8 @@ async function handler(req, res) {
     if (p.startsWith("/preview-preset/")) {
       return await servePresetPreview(res, p.split("/")[2], url.searchParams.get("video"));
     }
+    // The one library module the UI shares with the server (no build step).
+    if (p === "/lib/textcut.mjs") return serveFile(req, res, path.join(ROOT, "lib", "textcut.mjs"));
     if (p.startsWith("/media/")) {
       return serveFile(req, res, path.join(MEDIA, path.basename(p)));
     }

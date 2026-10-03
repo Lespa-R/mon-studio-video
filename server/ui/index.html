@@ -63,6 +63,8 @@
           <div class="transport">
             <div class="tp-side">
               <button id="trim-open" disabled title="Couper le début ou la fin du clip">✂ Rogner</button>
+              <button id="sh-open" disabled title="Découper un long rush en plans : chaque plan devient un clip (PySceneDetect)">▦ Plans</button>
+              <button id="tx-open" disabled title="Montage par le texte : retirer des mots, des silences, des hésitations (Whisper)">✎ Texte</button>
             </div>
             <div class="tp-center">
               <button id="restart" disabled title="Au début (Début ↖)">⏮</button>
@@ -264,6 +266,76 @@
 
     <div class="toast" id="toast" role="alert" hidden></div>
 
+    <!-- Split a rush into shots: each kept shot becomes a clip. -->
+    <div class="dlg-back" id="shots" hidden>
+      <div class="dlg sh-dlg" role="dialog" aria-modal="true" aria-labelledby="sh-title">
+        <div class="dlg-title" id="sh-title">Découper en plans</div>
+        <div class="sh-body">
+          <div class="tx-side">
+            <div class="trim-view"><video id="sh-video" preload="auto" playsinline controls></video></div>
+            <div class="tx-box">
+              <label>Sensibilité <select id="sh-sens"></select></label>
+              <label>Plan le plus court
+                <input type="number" id="sh-min" value="1" step="0.5" min="0.3" max="10" /> s</label>
+              <div class="tx-btns">
+                <button id="sh-detect" class="primary">Détecter les plans</button>
+                <button id="sh-all" hidden>Tout cocher / décocher</button>
+              </div>
+            </div>
+          </div>
+          <div class="sh-grid" id="sh-grid"></div>
+        </div>
+        <div class="dlg-msg" id="sh-msg"></div>
+        <div class="dlg-actions">
+          <span class="trim-len" id="sh-len"></span>
+          <span class="grow"></span>
+          <button id="sh-cancel">Annuler</button>
+          <button id="sh-ok" class="primary" disabled>Créer les clips</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Montage par le texte: remove words and pauses from the ORIGINAL clip. -->
+    <div class="dlg-back" id="tx" hidden>
+      <div class="dlg tx-dlg" role="dialog" aria-modal="true" aria-labelledby="tx-title">
+        <div class="dlg-title" id="tx-title">Montage par le texte</div>
+        <div class="tx-body">
+          <div class="tx-side">
+            <div class="trim-view"><video id="tx-video" preload="auto" playsinline></video></div>
+            <div class="trim-row">
+              <button id="tx-play">▶ Écouter le montage</button>
+              <span class="trim-now" id="tx-now">0:00.0</span>
+            </div>
+            <div class="tx-box" id="tx-tools" hidden>
+              <div class="tx-box-title">Nettoyage automatique</div>
+              <label>Raccourcir les silences de plus de
+                <input type="number" id="tx-maxpause" value="0.6" step="0.1" min="0.2" max="5" /> s</label>
+              <label class="tx-check"><input type="checkbox" id="tx-hes" /> Retirer aussi les hésitations ≈
+                <span class="tx-hint">(à écouter : parfois un vrai mot)</span></label>
+              <div class="tx-btns">
+                <button id="tx-auto" class="primary">Nettoyer</button>
+                <button id="tx-cut" title="Retire la sélection, ou la remet si elle est déjà retirée (⌫)">✂ Sélection (⌫)</button>
+                <button id="tx-clear" title="Remettre tous les passages retirés">Tout remettre</button>
+              </div>
+              <div class="tx-legend"><span class="tp">⏸</span> silence · <span class="th">≈</span> son sans texte · <span class="tw cut">barré</span> retiré</div>
+            </div>
+            <div class="tx-box" id="tx-lang-row">
+              <label>Langue <select id="tx-lang"></select></label>
+              <button id="tx-transcribe" title="Transcrire (ou retranscrire) l'original avec Whisper, sur ce Mac">Transcrire avec Whisper</button>
+            </div>
+          </div>
+          <div class="tx-text" id="tx-text" tabindex="0"></div>
+        </div>
+        <div class="dlg-msg" id="tx-msg"></div>
+        <div class="dlg-actions">
+          <span class="trim-len" id="tx-len"></span>
+          <span class="grow"></span>
+          <button id="tx-cancel">Annuler</button>
+          <button id="tx-ok" class="primary" disabled>Appliquer au clip</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Trim: pick the part of the ORIGINAL clip to keep. -->
     <div class="dlg-back" id="trim" hidden>
       <div class="dlg trim-dlg" role="dialog" aria-modal="true" aria-labelledby="trim-title">
@@ -317,9 +389,12 @@
       </div>
     </div>
 
+    <script type="module">import * as TextCut from "/lib/textcut.mjs"; window.TextCut = TextCut;</script>
     <script src="/app-core.js"></script>
     <script src="/app-storage.js"></script>
     <script src="/app-trim.js"></script>
+    <script src="/app-textcut.js"></script>
+    <script src="/app-shots.js"></script>
     <script src="/app-editor.js"></script>
     <script src="/app-library.js"></script>
     <script src="/app-promos.js"></script>
