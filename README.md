@@ -206,6 +206,34 @@ sous-titres corrigés (pour YouTube, LinkedIn…).
   remettre un passage, ou **Tout remettre**. Les effets et les sous-titres
   suivent ; les mots retirés disparaissent aussi des sous-titres.
 
+### Texte derrière un objet (fixe ou mobile)
+
+Dans l'inspecteur, sur un clip avec un effet « derrière » (texte derrière moi,
+remplacement de fond…), le menu **Découpe** propose :
+
+- **Personne seule**, **Personne + objets tenus** (macOS) ;
+- **Objet choisi** : l'objet seul passe devant le texte ;
+- **Personne + objet choisi** : toi et l'objet.
+
+Choisir l'objet (ou **🎯 Objet…** pour le changer) : glisse le curseur jusqu'à
+une image où l'objet se voit bien, **clique dessus** — il se colore en bleu
+(SAM 2, sur ton Mac ; une dizaine de secondes la première fois, ensuite
+instantané). **Partie · Moyen · Entier** règle la taille prise pour ce clic
+(une banane, une partie du régime, tout le régime). Un autre clic ajoute ce qui
+manque, **⌥-clic** (ou clic droit) retire ce qui déborde. **Suivre cet objet** :
+il est suivi dans tout le clip, même s'il bouge ou que la caméra bouge —
+environ 4 images par seconde (une minute pour 8 s de vidéo), une fois ; le
+résultat est gardé tant que tu ne changes ni le clip ni l'objet.
+
+Installation (une fois, dans le même `.venv` que les plans) :
+
+```bash
+cd ~/Code/mon-studio-video && SAM2_BUILD_CUDA=0 .venv/bin/pip install torch torchvision "git+https://github.com/facebookresearch/sam2.git"
+curl -L -o models/sam2.1_hiera_small.pt https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_small.pt
+```
+
+(Le paquet PyPI nommé « sam2 » n'est pas celui de Meta : passe par GitHub.)
+
 ### Découper un rush en plans
 
 **▦ Plans**, sous l'aperçu : **Détecter les plans** repère chaque changement de
@@ -312,7 +340,9 @@ Le texte derrière toi reste parfaitement calé, même recadré en vertical.
 
 ### 6. Exporter
 
-**Rendre le MP4** produit la vidéo. L'avancement s'affiche aussi dans le titre
+**Rendre le MP4** produit la vidéo. Les vidéos HDR des téléphones récents (HLG,
+HDR10) sont converties en SDR à l'import — ou une fois, au premier export, pour
+les clips plus anciens : sans ça, l'export ne contenait que la découpe. L'avancement s'affiche aussi dans le titre
 de l'onglet (utile depuis une autre fenêtre) ; à la fin, **Ouvrir** la lance
 dans QuickTime et **Afficher dans le Finder** la montre dans `renders/`. Tu peux
 continuer à modifier pendant le rendu : il utilise l'état au moment du clic.

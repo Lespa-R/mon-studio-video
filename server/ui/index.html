@@ -94,12 +94,10 @@
               <button id="fxb-open" title="Navigateur d'effets (⌘5)">＋ Effets…</button>
             </div>
             <label class="matte-pick" id="matte-pick" hidden
-                   title="Ce que la découpe garde devant le texte. « Personne + objets tenus » est aussi plus stable quand quelqu'un tient quelque chose devant lui.">
+                   title="Ce que la découpe garde devant le texte. « Personne + objets tenus » est aussi plus stable quand quelqu'un tient quelque chose devant lui. « Objet choisi » : tu cliques sur n'importe quel objet, il est suivi dans tout le clip.">
               <span>Découpe</span>
-              <select id="matte-model">
-                <option value="person">Personne seule</option>
-                <option value="subject">Personne + objets tenus</option>
-              </select>
+              <select id="matte-model"></select>
+              <button id="matte-obj" hidden title="Choisir (ou changer) l'objet suivi">🎯 Objet…</button>
             </label>
             <div class="hint" id="clip-note" hidden></div>
             <div class="scroll" id="stack"></div>
@@ -268,6 +266,32 @@
 
     <div class="toast" id="toast" role="alert" hidden></div>
 
+    <!-- « Objet choisi »: click an object, SAM 2 follows it through the clip. -->
+    <div class="dlg-back" id="obj" hidden>
+      <div class="dlg obj-dlg" role="dialog" aria-modal="true" aria-labelledby="obj-title">
+        <div class="dlg-title" id="obj-title">Choisir l'objet à garder devant le texte</div>
+        <div class="obj-stage" id="obj-stage">
+          <img id="obj-frame" alt="" />
+          <img id="obj-mask" alt="" hidden />
+          <div id="obj-dots"></div>
+        </div>
+        <div class="trim-row">
+          <span class="seg" id="obj-level" title="SAM 2 propose trois tailles pour un clic : une partie, plus grand, l'objet entier">
+            <button data-level="0">Partie</button><button data-level="1">Moyen</button><button data-level="2">Entier</button>
+          </span>
+          <input type="range" id="obj-time" min="0" step="0.01" value="0" />
+          <span class="trim-now" id="obj-now">0:00.0</span>
+        </div>
+        <div class="dlg-msg" id="obj-msg"></div>
+        <div class="dlg-actions">
+          <button id="obj-clear">Effacer les clics</button>
+          <span class="grow"></span>
+          <button id="obj-cancel">Annuler</button>
+          <button id="obj-ok" class="primary" disabled>Suivre cet objet</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Split a rush into shots: each kept shot becomes a clip. -->
     <div class="dlg-back" id="shots" hidden>
       <div class="dlg sh-dlg" role="dialog" aria-modal="true" aria-labelledby="sh-title">
@@ -397,6 +421,7 @@
     <script src="/app-trim.js"></script>
     <script src="/app-textcut.js"></script>
     <script src="/app-shots.js"></script>
+    <script src="/app-object.js"></script>
     <script src="/app-editor.js"></script>
     <script src="/app-library.js"></script>
     <script src="/app-promos.js"></script>

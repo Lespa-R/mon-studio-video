@@ -140,7 +140,7 @@ test("a line whose every word is removed is set aside, then restored", () => {
 
 test("the ffmpeg join filter has one trimmed piece per segment, with short fades", () => {
   const f = joinFilter([{ start: 0, end: 1 }, { start: 2, end: 3.5 }], true);
-  assert.match(f, /\[0:v\]trim=start=2\.000:end=3\.500,setpts=PTS-STARTPTS\[v1\]/);
+  assert.match(f, /\[0:v\]trim=start=2\.000:end=3\.500,setpts=PTS-STARTPTS,setparams=[^[]*\[v1\]/);
   assert.match(f, /afade=t=out:st=1\.490:d=0\.01\[a1\]/);
   assert.match(f, /\[v0\]\[a0\]\[v1\]\[a1\]concat=n=2:v=1:a=1\[v\]\[a\]$/);
   assert.match(joinFilter([{ start: 0, end: 1 }, { start: 2, end: 3 }], false), /concat=n=2:v=1:a=0\[v\]$/);

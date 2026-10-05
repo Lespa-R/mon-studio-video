@@ -43,7 +43,8 @@ server/loopback.cjs    preloaded into Remotion Studio so it listens on 127.0.0.1
 server/ui/index.html   markup; styles.css; app-*.js = classic scripts sharing one
                        global scope, loaded in order (no build, no modules):
                        core (dialogs, clips, inspector, preview, timeline) · storage ·
-                       trim · textcut (montage par le texte) · shots (rush → plans) · editor (subtitles, drag, projects, presets) · library ·
+                       trim · textcut (montage par le texte) · shots (rush → plans) ·
+                       object (objet choisi, SAM 2) · editor (subtitles, drag, projects, presets) · library ·
                        promos · pages (tabs, format, brand) · main (wiring, layout, boot) ·
                        fcp (Final Cut habits: timecode, skimming, zoom, areas,
                        effects browser, waveform, shortcuts)
@@ -57,6 +58,7 @@ lib/trim.mjs           trimming: shift effects / subtitles when the cut moves (p
 lib/textcut.mjs        montage par le texte: transcript tokens, removed passages, time maps,
                        Whisper output parsing (pure, no imports — the UI loads it too, as a module)
 lib/history.mjs        undo / redo of a clip's effects, subtitles, cut-out choice (in memory)
+lib/objects.mjs        « Objet choisi »: cut-out choices, clicked-object options (pure)
 lib/shots.mjs          splitting a rush into shots: shot list clean-up, clip names (pure)
 lib/storage.mjs        disk usage: sorts every file into a kind, says what may be deleted (pure)
 lib/captions.mjs       subtitles: words → lines, edits, SRT in/out, chunking (pure)
@@ -71,6 +73,8 @@ lib/promos.mjs         promos: scene catalogue, storyboard validation, timing, w
 tools/*.swift          Vision helpers: facedet (face box), personmatte (cut-out → RGBA);
                        transcribe.swift → tools/Transcribe.app (on-device speech → timed words);
                        persontrack (bodies + faces, several people, N samples/s)
+tools/objtrack.py      SAM 2.1 follows a clicked object → grey mask video (personmatte --mask-video)
+tools/sam_worker.py    SAM 2.1 resident worker: instant mask for the object dialog's clicks
 tools/scenes.py        PySceneDetect shot detection, run with .venv/bin/python (Python 3.12)
 bin/behind.mjs         one-shot CLI
 test/*.test.mjs        node --test
@@ -205,6 +209,23 @@ Skimming (S), J/K/L, arrows, ⌘±/⇧Z zoom, ⌘4 / ⌃⌘1 / ⌃⌘2 areas, V,
 `test/ui.test.mjs` opens every tab in a headless Chrome and fails on any
 script error: run `npm test` after touching the UI.
 
+## Objet choisi (SAM 2)
+
+`matteOptions = { model: "person" | "subject" | "none", object: { t, points, level } }`.
+With an object, `ensureMatte` first runs `ensureObjectMask` (objtrack.py →
+`media/<id>-object.mp4`, kept while `objectSignature` matches), then
+personmatte merges it with the person (`--mask-video`, `--model none` for the
+object alone, window 1 since SAM 2 is already steady). For a single click
+SAM 2 proposes three nested masks and its "confidence" favours the smallest
+(one banana): the user picks the size (`level` 0/1/2, `sam_worker.pick`), and
+objtrack seeds the video tracking with that same image mask — what the dialog
+shows is what is followed. bfloat16 on MPS halves the time; clips over 40 fps
+are tracked every other frame; 150-frame chunks bound memory. The dialog shows
+a still frame (`GET …/frame?t=&w=`), not a <video>: a video under an overlay
+can show black in Chrome. A trim maps the clicked time through the cut, or
+drops the object if its frame was cut away. **Install sam2 from Meta's
+GitHub, never PyPI's "sam2"** (a third-party fork).
+
 ## Undo
 
 Every non-GET request on `/api/videos/:id/(effects|captions|matte)` is
@@ -271,6 +292,17 @@ lost behind the step.
   voice but no word are shown as « ≈ » hesitations, never cut by default (an
   acronym like "H&M" can look like one).
 
+- **HDR clips render as the cut-out alone.** A phone video tagged BT.2020 /
+  HLG (or PQ, or 10-bit) makes HyperFrames drop the background layer and
+  every effect — even with `--sdr` — leaving only the cut-out on black
+  (2026-10-05). Every working copy is therefore 8-bit BT.709 with a keyframe
+  each second: `registerClip` flattens HDR imports (`media.isHdr`), clips
+  imported before are converted once by `ensureSdr` before a preview or a
+  render (`video.sdr`), and every encode (`flatten`, `cutClip`, `joinFilter`)
+  sets the tags with `setparams` (`SDR_TAGS`) — x264 takes them from the
+  frames, output options alone keep "HLG". HLG re-tagged as SDR looks right;
+  PQ comes out flatter (no zscale in this ffmpeg to tone-map it).
+
 - **`store.save()` chains writes but never lets one failure poison the
   chain** (a rejected link used to make every later save fail silently until
   restart). Keep the `.catch(() => {})` before `.then`.
@@ -290,8 +322,8 @@ lost behind the step.
   added 2026-10-03 at the user's request) and fall back to Apple's on-device
   recogniser when it is missing — never a speech API.
 - **Zero runtime dependencies.** No `npm install`, no build step. Optional
-  local AI tools sit outside node: whisper.cpp (Homebrew) and PySceneDetect in
-  `.venv` (2026-10-03, asked for by the user); the studio checks for each and
+  local AI tools sit outside node: whisper.cpp (Homebrew), PySceneDetect and
+  SAM 2.1 + PyTorch in `.venv` (2026-10-03 / 05, asked for by the user); the studio checks for each and
   says how to install it when missing. Remotion
   stays in the separate `~/Code/promos` workspace.
 - **Name: « Mon Studio Vidéo »** (renamed from « Mon Studio HyperFrame » on

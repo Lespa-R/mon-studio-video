@@ -79,17 +79,28 @@ function drawClipbar() {
   const usesMatte = v && v.effects.some((fx) =>
     fx.enabled !== false && state.effects.find((e) => e.type === fx.type)?.needsMatte);
   $("#matte-pick").hidden = !usesMatte;
-  if (usesMatte) $("#matte-model").value = v.matteOptions?.model || "person";
+  if (usesMatte) {
+    fillCutoutMenu();
+    const choice = cutoutChoiceOf(v);
+    $("#matte-model").value = choice;
+    $("#matte-obj").hidden = !choiceDef(choice)?.object;
+  }
 }
 
 $("#matte-model").onchange = async (e) => {
   const v = videoById(selected);
   if (!v) return;
+  const choice = e.target.value;
+  // An object choice with no object yet: pick it first (app-object.js).
+  if (choiceDef(choice)?.object && !v.matteOptions?.object) {
+    e.target.value = cutoutChoiceOf(v);
+    return openObject(v, choice);
+  }
   try {
     await api(`/api/videos/${v.id}/matte`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: e.target.value }),
+      body: JSON.stringify({ choice }),
     });
     setStatus("Nouvelle découpe : recalcul de l'aperçu…");
     await refresh();

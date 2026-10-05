@@ -89,9 +89,9 @@ async function main() {
   console.log(`\nbehind · ${path.basename(source)} · "${opts.text || "Hello World"}"\n`);
 
   let info = await media.probe(bgPath);
-  if (info.rotation) {
-    step(`rotation de ${info.rotation}° appliquée aux pixels`);
-    await media.flatten(bgPath, info.rotation);
+  if (info.rotation || info.hdr) {
+    step(info.rotation ? `rotation de ${info.rotation}° appliquée aux pixels` : "vidéo HDR convertie en SDR");
+    await media.flatten(bgPath, info.rotation, { hdr: info.hdr, fps: info.fps });
     info = await media.probe(bgPath);
   }
   step(`${info.width}x${info.height} · ${info.fps.toFixed(2)} fps · ` +

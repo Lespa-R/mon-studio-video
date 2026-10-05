@@ -37,7 +37,10 @@ var quality: VNGeneratePersonSegmentationRequest.QualityLevel = .accurate
 var blurRadius: Double = 1.5
 var smooth: Double = 0.0
 var model = "person"    // person: Vision person segmentation; subject: foreground
-                        // instances (the person AND what they hold), macOS 14+
+                        // instances (the person AND what they hold), macOS 14+;
+                        // none: no detection, only --mask-video
+var maskVideo: String?  // a grey video (tools/objtrack.py): a chosen object,
+                        // merged with what the model finds
 var window = 2          // frames averaged on each side (0 = off)
 var edgeLow = 0.2       // contrast curve applied to the averaged mask
 var edgeHigh = 0.8
@@ -58,7 +61,14 @@ while i < argv.count {
     case "--smooth":
         i += 1; smooth = Double(argValue(argv, i) ?? "") ?? 0
     case "--model":
-        i += 1; model = argValue(argv, i) == "subject" ? "subject" : "person"
+        i += 1
+        switch argValue(argv, i) ?? "" {
+        case "subject": model = "subject"
+        case "none": model = "none"
+        default: model = "person"
+        }
+    case "--mask-video":
+        i += 1; maskVideo = argValue(argv, i)
     case "--window":
         i += 1; window = max(0, min(6, Int(argValue(argv, i) ?? "") ?? 2))
     default:
@@ -67,7 +77,7 @@ while i < argv.count {
     i += 1
 }
 guard let videoPath = path else {
-    fail("usage: personmatte <video> [--quality accurate|balanced|fast] [--blur r] [--smooth f] [--window n] [--model person|subject]")
+    fail("usage: personmatte <video> [--quality accurate|balanced|fast] [--blur r] [--smooth f] [--window n] [--model person|subject|none] [--mask-video grey.mp4]")
 }
 
 // ---------- asset ----------
@@ -153,10 +163,81 @@ func readMask(_ pb: CVPixelBuffer) -> Mask {
     return Mask(w: w, h: h, v: v)
 }
 
+// ---------- chosen object (--mask-video) ----------
+// Read in step with the clip: one grey frame per frame. If it runs short,
+// its last frame stays.
+
+var objectOutput: AVAssetReaderTrackOutput?
+var objectReader: AVAssetReader?
+var lastObject: Mask?
+var objTrack: AVAssetTrack?
+if let mv = maskVideo {
+    let objAsset = AVURLAsset(url: URL(fileURLWithPath: mv))
+    let s2 = DispatchSemaphore(value: 0)
+    Task { objTrack = try? await objAsset.loadTracks(withMediaType: .video).first; s2.signal() }
+    s2.wait()
+    guard let t = objTrack, let r = try? AVAssetReader(asset: objAsset) else { fail("cannot read mask video \(mv)") }
+    let o = AVAssetReaderTrackOutput(track: t, outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+    o.alwaysCopiesSampleData = false
+    r.add(o)
+    guard r.startReading() else { fail("mask video reader failed") }
+    objectReader = r
+    objectOutput = o
+}
+
+func nextObjectMask() -> Mask? {
+    guard let o = objectOutput else { return nil }
+    if let sample = o.copyNextSampleBuffer(), let pb = CMSampleBufferGetImageBuffer(sample) {
+        CVPixelBufferLockBaseAddress(pb, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
+        let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
+        let bpr = CVPixelBufferGetBytesPerRow(pb)
+        let base = CVPixelBufferGetBaseAddress(pb)!.assumingMemoryBound(to: UInt8.self)
+        var v = [Float](repeating: 0, count: w * h)
+        for y in 0..<h {
+            let row = base + y * bpr
+            for x in 0..<w { v[y * w + x] = Float(row[x * 4 + 2]) / 255 } // red of BGRA
+        }
+        lastObject = Mask(w: w, h: h, v: v)
+    }
+    return lastObject
+}
+
+// Bilinear resize, to merge two masks of different sizes.
+func resized(_ m: Mask, _ w: Int, _ h: Int) -> Mask {
+    if m.w == w && m.h == h { return m }
+    var v = [Float](repeating: 0, count: w * h)
+    let sx = Float(m.w) / Float(w), sy = Float(m.h) / Float(h)
+    for y in 0..<h {
+        let fy = max(0, min(Float(m.h - 1), (Float(y) + 0.5) * sy - 0.5))
+        let y0 = Int(fy), y1 = min(m.h - 1, y0 + 1), ty = fy - Float(y0)
+        for x in 0..<w {
+            let fx = max(0, min(Float(m.w - 1), (Float(x) + 0.5) * sx - 0.5))
+            let x0 = Int(fx), x1 = min(m.w - 1, x0 + 1), tx = fx - Float(x0)
+            let a = m.v[y0 * m.w + x0] * (1 - tx) + m.v[y0 * m.w + x1] * tx
+            let b = m.v[y1 * m.w + x0] * (1 - tx) + m.v[y1 * m.w + x1] * tx
+            v[y * w + x] = a * (1 - ty) + b * ty
+        }
+    }
+    return Mask(w: w, h: h, v: v)
+}
+
+// Person (or subject) and object together: the larger size, the higher value.
+func union(_ a: Mask?, _ b: Mask?) -> Mask? {
+    guard let a = a else { return b }
+    guard let b = b else { return a }
+    let w = max(a.w, b.w), h = max(a.h, b.h)
+    let ra = resized(a, w, h), rb = resized(b, w, h)
+    var v = ra.v
+    for k in 0..<v.count { v[k] = max(v[k], rb.v[k]) }
+    return Mask(w: w, h: h, v: v)
+}
+
 let subjectRequest = VNGenerateForegroundInstanceMaskRequest()
 
 // The mask of the current frame, or nil when nobody (nothing) is found.
 func detect(_ pixelBuffer: CVPixelBuffer) -> Mask? {
+    if model == "none" { return nil }
     let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
     if model == "subject" {
         try? handler.perform([subjectRequest])
@@ -276,11 +357,12 @@ while let sample = output.copyNextSampleBuffer() {
     if mask != nil {
         lastMask = mask
         heldFor = 0
-    } else {
+    } else if model != "none" {
         missingPerson += 1
         heldFor += 1
         if heldFor <= holdFrames { mask = lastMask }
     }
+    mask = union(mask, nextObjectMask())
     entries.append(Entry(sample: sample, mask: mask))
     while entries.count - 1 - centre >= window { advance() }
 }

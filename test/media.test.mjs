@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseProbe, summariseFaces } from "../lib/media.mjs";
+import { parseProbe, summariseFaces, isHdr } from "../lib/media.mjs";
 
 test("probe output is reduced to the fields the studio uses", () => {
   const info = parseProbe({
@@ -43,4 +43,14 @@ test("face placement uses the median centre and the highest chin", () => {
 
 test("no face at all gives null rather than a guess", () => {
   assert.equal(summariseFaces([null, {}]), null);
+});
+
+test("HDR, wide-gamut and 10-bit videos are spotted (they get an SDR working copy)", () => {
+  assert.equal(isHdr({ color_transfer: "arib-std-b67", color_primaries: "bt2020", pix_fmt: "yuv420p" }), true); // phone HLG
+  assert.equal(isHdr({ color_transfer: "smpte2084", pix_fmt: "yuv420p10le" }), true); // HDR10
+  assert.equal(isHdr({ pix_fmt: "yuv420p10le" }), true);
+  assert.equal(isHdr({ color_transfer: "bt709", color_primaries: "bt709", pix_fmt: "yuv420p" }), false);
+  assert.equal(isHdr({}), false);
+  const info = parseProbe({ streams: [{ width: 1440, height: 1920, r_frame_rate: "30/1", color_transfer: "arib-std-b67" }], format: { duration: "7.2" } }, true);
+  assert.equal(info.hdr, true);
 });

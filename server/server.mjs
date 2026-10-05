@@ -14,9 +14,10 @@ import { Store, newId } from "../lib/store.mjs";
 import { compose, needsMatte, needsTracking } from "../lib/compose.mjs";
 import { buildTracks } from "../lib/tracking.mjs";
 import { normaliseTrim, shiftForTrim } from "../lib/trim.mjs";
-import { normaliseCuts, keptSegments, keptLength, localOf, settleCuts } from "../lib/textcut.mjs";
+import { normaliseCuts, keptSegments, keptLength, localOf, sourceOf as sourceOfTime, settleCuts } from "../lib/textcut.mjs";
 import { SENSITIVITIES, normaliseShots, shotName } from "../lib/shots.mjs";
 import { makeHistory } from "../lib/history.mjs";
+import { CUTOUT_CHOICES, cutoutChoice, normaliseObject } from "../lib/objects.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
@@ -79,6 +80,8 @@ function mediaNames(video) {
     people: `${video.id}-people.json`,
     // Whisper's words, in the original's time (montage par le texte).
     transcript: `${video.id}-transcript.json`,
+    // The chosen object's mask, frame by frame (SAM 2): a cache.
+    object: `${video.id}-object.mp4`,
     // The untouched original, kept once the clip has been trimmed.
     orig: video.trim ? `${video.id}-orig${video.trim.ext}` : null,
   };
@@ -149,16 +152,28 @@ async function ensureMatte(video, job) {
   }
 
   const entry = { jobs: new Set([job]), promise: null };
-  for (const j of entry.jobs) j.message = "Découpe de la personne image par image…";
+  const say = (m) => { for (const j of entry.jobs) j.message = m; };
+  say("Découpe de la personne image par image…");
 
   entry.promise = (async () => {
     const info = {
       width: video.width, height: video.height,
       fps: video.fps, fpsExact: video.fpsExact, duration: video.duration,
     };
+    const opts = { ...(video.matteOptions || {}) };
+    // A chosen object is followed first (most of the time), then merged.
+    let share = 0;
+    if (opts.object) {
+      share = 0.75;
+      say("Suivi de l'objet image par image (SAM 2)…");
+      opts.maskVideo = await ensureObjectMask(video, (p) => { for (const j of entry.jobs) j.progress = p * share; });
+      // SAM 2 is already steady from frame to frame: less averaging, less trail.
+      if (opts.model === "none") opts.window = 1;
+      say("Découpe image par image…");
+    }
     const result = await media.makeMatte(
-      path.join(MEDIA, bg), info, target, video.matteOptions || {},
-      (p) => { for (const j of entry.jobs) j.progress = p; });
+      path.join(MEDIA, bg), info, target, opts,
+      (p) => { for (const j of entry.jobs) j.progress = share + p * (1 - share); });
 
     // The clip may have been deleted while we were cutting it out.
     if (!findVideo(video.id)) {
@@ -178,11 +193,44 @@ async function ensureMatte(video, job) {
 // MATTE_VERSION changes when personmatte's output does (v2: temporal
 // stabiliser), so every clip's cut-out is rebuilt once with the new code.
 const MATTE_VERSION = 2;
+// Clips imported before SDR working copies existed (2026-10-05) may still be
+// HDR, which the renderer cannot composite: converted once, in place (same
+// frames, so the cut-out and tracks stay valid). New imports are SDR already.
+const sdrInFlight = new Map();
+async function ensureSdr(video, job) {
+  if (video.sdr) return;
+  if (sdrInFlight.has(video.id)) return sdrInFlight.get(video.id);
+  const run = (async () => {
+    const file = path.join(MEDIA, mediaNames(video).bg);
+    const info = await media.probe(file);
+    if (info.hdr) {
+      if (job) job.message = "Conversion de la vidéo HDR en SDR (une seule fois)…";
+      await media.flatten(file, 0, { hdr: true, fps: info.fps });
+    }
+    video.sdr = 1;
+    await saveState();
+  })().finally(() => sdrInFlight.delete(video.id));
+  sdrInFlight.set(video.id, run);
+  return run;
+}
+
+// The object's mask is kept while the clip and the clicks stay the same.
+async function ensureObjectMask(video, onProgress) {
+  const file = path.join(MEDIA, mediaNames(video).object);
+  const sig = JSON.stringify(video.matteOptions.object) + `|${video.ext}|${video.duration}`;
+  if (video.objectSignature === sig && fs.existsSync(file)) return file;
+  await media.trackObject(path.join(MEDIA, mediaNames(video).bg), file, {
+    ...video.matteOptions.object, fps: video.fps, onProgress,
+  });
+  video.objectSignature = sig;
+  return file;
+}
+
 const matteSignature = (video) =>
   `v${MATTE_VERSION}|` + JSON.stringify(video.matteOptions || {}) + "|" + video.ext;
 
 // What the cut-out keeps: the person alone, or the person and what they hold.
-const MATTE_MODELS = ["person", "subject"];
+const MATTE_MODELS = ["person", "subject"]; // the older API (model only)
 
 const filesOf = (video) => {
   const { bg, fg } = mediaNames(video);
@@ -215,13 +263,15 @@ function inRenderQueue(job, work) {
   return turn;
 }
 
-function queueRender({ name, html, mattes }) {
-  return startJob("render", (job) => inRenderQueue(job, () => runRender({ name, html, mattes }, job)));
+function queueRender({ name, html, mattes, videoId }) {
+  return startJob("render", (job) => inRenderQueue(job, () => runRender({ name, html, mattes, videoId }, job)));
 }
 
-async function runRender({ name, html, mattes }, job) {
-  // The composition is already fixed; only the cut-outs it points at may
-  // still need building.
+async function runRender({ name, html, mattes, videoId }, job) {
+  // The composition is already fixed; only the clip's SDR copy and the
+  // cut-outs it points at may still need building.
+  const clip = videoId && findVideo(videoId);
+  if (clip) await ensureSdr(clip, job);
   for (const video of mattes) {
     const live = findVideo(video.id);
     if (!live) throw new Error("un clip de ce rendu a été supprimé");
@@ -367,10 +417,10 @@ function commitTrim(video) {
 const storage = makeStorage({
   ROOT, MEDIA, RENDERS, store, send, readJson, saveState,
   promos: () => promos,
-  busy: (id) => mattesInFlight.has(id) || peopleInFlight.has(id) || trimsInFlight.has(id) || transcriptsInFlight.has(id),
+  busy: (id) => mattesInFlight.has(id) || peopleInFlight.has(id) || trimsInFlight.has(id) || transcriptsInFlight.has(id) || sdrInFlight.has(id),
   forget(it) {
     const video = it.videoId ? findVideo(it.videoId) : null;
-    if (video && it.kind === "matte") delete video.matteSignature;
+    if (video && it.kind === "matte") { delete video.matteSignature; delete video.objectSignature; }
     if (video && it.kind === "people") { peopleCache.delete(video.id); delete video.peopleCount; }
     if (video && it.kind === "transcript") delete video.transcriptLang;
     if (video && it.kind === "original") commitTrim(video);
@@ -492,8 +542,8 @@ async function registerClip({ id, target, original, ext, projectId, after = null
     throw new Error(`Fichier illisible : ${error.message}`);
   }
 
-  if (info.rotation) {
-    await media.flatten(target, info.rotation);
+  if (info.rotation || info.hdr) {
+    await media.flatten(target, info.rotation, { hdr: info.hdr, fps: info.fps });
     info = await media.probe(target);
   }
 
@@ -506,6 +556,7 @@ async function registerClip({ id, target, original, ext, projectId, after = null
     fps: info.fps, fpsExact: info.fpsExact,
     duration: info.duration, hasAudio: info.hasAudio,
     face, effects: [], matteOptions: { quality: "accurate", blur: 1.5, smooth: 0 },
+    sdr: 1, // flattened above if it was HDR
     addedAt: new Date().toISOString(),
   };
 
@@ -581,9 +632,10 @@ async function addAsset(req, res) {
 }
 
 async function dropMedia(video) {
-  const { bg, fg, people, orig, transcript } = mediaNames(video);
+  const { bg, fg, people, orig, transcript, object } = mediaNames(video);
   if (orig) await fsp.rm(path.join(MEDIA, orig), { force: true });
   await fsp.rm(path.join(MEDIA, transcript), { force: true });
+  await fsp.rm(path.join(MEDIA, object), { force: true });
   await fsp.rm(path.join(MEDIA, bg), { force: true });
   await fsp.rm(path.join(MEDIA, fg), { force: true });
   await fsp.rm(path.join(MEDIA, people), { force: true });
@@ -615,6 +667,8 @@ async function handleApi(req, res, url) {
         languages: LANGUAGES,
         whisper: media.whisperStatus(),
         scenes: media.scenesStatus(),
+        sam: media.samStatus(),
+        cutoutChoices: CUTOUT_CHOICES.map(({ value, label, object }) => ({ value, label, object })),
         sensitivities: SENSITIVITIES,
       },
       defaultBrand: DEFAULT_BRAND,
@@ -956,15 +1010,44 @@ async function handleApi(req, res, url) {
     // cut-out -----------------------------------------------------------------
     // Which detector cuts the clip out. The signature changes with it, so the
     // next preview or render rebuilds the cut-out.
+    // `choice` is a CUTOUT_CHOICES value; an object choice needs `object`
+    // ({ t, points }) — or keeps the one already chosen.
     if (sub === "matte" && req.method === "PATCH") {
       const body = await readJson(req);
-      if (!MATTE_MODELS.includes(body.model)) return send(res, 400, { error: "unknown model" });
+      const choice = CUTOUT_CHOICES.find((c) => c.value === (body.choice ?? (MATTE_MODELS.includes(body.model) ? body.model : null)));
+      if (!choice) return send(res, 400, { error: "choix de découpe inconnu" });
       if (mattesInFlight.has(video.id)) {
         return send(res, 409, { error: "Découpe en cours sur ce clip : réessaie quand elle est finie." });
       }
-      video.matteOptions = { ...(video.matteOptions || {}), model: body.model };
+      const object = choice.object ? normaliseObject(body.object ?? video.matteOptions?.object, video.duration) : null;
+      if (choice.object && !object) return send(res, 400, { error: "Clique d'abord sur l'objet à garder devant le texte." });
+      const { object: _old, ...rest } = video.matteOptions || {};
+      video.matteOptions = { ...rest, model: choice.model, ...(object ? { object } : {}) };
       await saveState();
       return send(res, 200, { video });
+    }
+
+    // The mask under the clicks, on one frame, for the object dialog.
+    if (sub === "object" && subId === "preview" && req.method === "POST") {
+      if (!media.samStatus().available) return send(res, 400, { error: "SAM 2 n'est pas installé (voir le README)." });
+      const object = normaliseObject(await readJson(req), video.duration);
+      if (!object) return send(res, 400, { error: "Clique sur l'objet." });
+      const dir = path.join(ROOT, ".transcode-cache", "frames");
+      const frame = path.join(dir, `obj-${video.id}-${Math.round(video.duration * 1000)}-${Math.round(object.t * 1000)}.jpg`);
+      if (!fs.existsSync(frame)) {
+        // SAM 2 works at 1024: no need for more.
+        const wide = video.width >= video.height;
+        await media.frameJpeg(path.join(MEDIA, mediaNames(video).bg), object.t, frame,
+          wide ? Math.min(1024, video.width) : Math.round(Math.min(1024, video.height) * video.width / video.height / 2) * 2);
+      }
+      const out = path.join(dir, `objmask-${video.id}-${Date.now()}.png`);
+      try {
+        const r = await media.objectPreview(frame, object.points, object.level, out);
+        const png = await fsp.readFile(out);
+        return send(res, 200, { overlay: `data:image/png;base64,${png.toString("base64")}`, area: r.area });
+      } finally {
+        await fsp.rm(out, { force: true });
+      }
     }
 
     // transcript (montage par le texte) ---------------------------------------
@@ -1010,9 +1093,11 @@ async function handleApi(req, res, url) {
     // trim (a new working file) gets new pictures.
     if (sub === "frame" && req.method === "GET") {
       const t = Math.min(video.duration, Math.max(0, Number(url.searchParams.get("t")) || 0));
+      // `w`: width in pixels (shot cards 320, the object dialog up to 1280).
+      const w = Math.round(Math.min(1280, Math.max(160, Number(url.searchParams.get("w")) || 320)) / 2) * 2;
       const file = path.join(ROOT, ".transcode-cache", "frames",
-        `${video.id}-${Math.round(video.duration * 1000)}-${Math.round(t * 1000)}.jpg`);
-      if (!fs.existsSync(file)) await media.frameJpeg(path.join(MEDIA, mediaNames(video).bg), t, file);
+        `${video.id}-${Math.round(video.duration * 1000)}-${Math.round(t * 1000)}-${w}.jpg`);
+      if (!fs.existsSync(file)) await media.frameJpeg(path.join(MEDIA, mediaNames(video).bg), t, file, w);
       return serveFile(req, res, file);
     }
     // Each shot becomes a clip of its own, placed after the rush. The rush
@@ -1101,7 +1186,9 @@ async function handleApi(req, res, url) {
           let ext;
           if (whole) {
             // Back to the whole clip: the original simply takes its place again.
+            // (It may predate SDR working copies: checked again before use.)
             ext = video.trim.ext;
+            delete video.sdr;
             await fsp.rename(origFile, path.join(MEDIA, `${video.id}-bg${ext}`));
           } else {
             ext = ".mp4";
@@ -1128,7 +1215,22 @@ async function handleApi(req, res, url) {
           // Everything measured on the old frames is stale: the cut-out, the
           // people tracks, the face (it may only appear in the part cut off).
           await fsp.rm(path.join(MEDIA, old.fg), { force: true });
+          await fsp.rm(path.join(MEDIA, old.object), { force: true });
           delete video.matteSignature;
+          delete video.objectSignature;
+          // The clicked frame moves with the cut; if it was cut away, the
+          // object must be chosen again.
+          let objectLost = false;
+          if (video.matteOptions?.object) {
+            const abs = sourceOfTime(keptSegments(from), video.matteOptions.object.t);
+            const at = localOf(keptSegments(to), abs);
+            if (at.kept) video.matteOptions.object.t = at.t;
+            else {
+              objectLost = true;
+              const { object: _gone, ...rest } = video.matteOptions;
+              video.matteOptions = { ...rest, model: rest.model === "none" ? "person" : rest.model };
+            }
+          }
           await fsp.rm(path.join(MEDIA, old.people), { force: true });
           peopleCache.delete(video.id);
           delete video.peopleCount;
@@ -1137,7 +1239,7 @@ async function handleApi(req, res, url) {
           try { video.face = await media.detectFace(path.join(MEDIA, `${video.id}-bg${ext}`), 24); } catch { video.face = null; }
 
           await saveState();
-          return { duration: video.duration, clamped: shifted.clamped, dropped: shifted.dropped, whole, cuts: to.cuts.length };
+          return { duration: video.duration, clamped: shifted.clamped, dropped: shifted.dropped, whole, cuts: to.cuts.length, objectLost };
         } catch (error) {
           // Never leave the clip without a working file: put back what was
           // there before this trim (the original is still on disk).
@@ -1266,6 +1368,7 @@ async function handleApi(req, res, url) {
     // The preview composes in memory; all it needs on disk is the cut-out.
     if (sub === "prepare" && req.method === "POST") {
       const job = startJob("prepare", async (j) => {
+        await ensureSdr(video, j);
         if (needsTracking(video)) await ensureTracks(video, j);
         if (needsMatte(video)) await ensureMatte(video, j);
         store.state.activeVideo = video.id;
@@ -1289,7 +1392,7 @@ async function handleApi(req, res, url) {
         }
         : compose(withPeople(snapshot), filesOf(snapshot), format, brand);
       return send(res, 200, {
-        job: queueRender({ name: video.name, html, mattes: needsMatte(video) ? [video] : [] }),
+        job: queueRender({ name: video.name, html, mattes: needsMatte(video) ? [video] : [], videoId: video.id }),
       });
     }
   }
