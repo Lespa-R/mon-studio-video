@@ -34,3 +34,9 @@ test("a full-clip overlay does not ramp in and out", () => {
   const calls = overlayTimeline("#x", timingOf({}, clip), 1);
   assert.match(calls, /duration: 0\.001/);
 });
+
+test("an overlay's ramps take at most a third of a short window each", () => {
+  const js = overlayTimeline("#o", { start: 1, duration: 0.6, end: 1.6, full: false }, 1, 0.4);
+  assert.match(js, /duration: 0\.2, ease: "power1\.out" \}, 1\);/);
+  assert.match(js, /duration: 0\.2, ease: "power1\.in" \}, 1\.4\);/);
+});

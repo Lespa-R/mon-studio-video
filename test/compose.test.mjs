@@ -297,8 +297,9 @@ test("a dragged element is centred on its x / y, and every draggable one marks i
 
 test("the catalogue tells the UI how each element is dragged", () => {
   const list = catalogue();
-  assert.deepEqual(list.find((e) => e.type === "counter").drag, { key: "position" });
-  assert.deepEqual(list.find((e) => e.type === "arrow").drag, { delta: true });
+  // Both can also be pinned to the scenery (« pin », lib/pins.mjs).
+  assert.deepEqual(list.find((e) => e.type === "counter").drag, { key: "position", pin: "pin" });
+  assert.deepEqual(list.find((e) => e.type === "arrow").drag, { delta: true, pin: "pin", pinKey: "attach" });
   assert.equal(list.find((e) => e.type === "progress").drag, null);
 });
 

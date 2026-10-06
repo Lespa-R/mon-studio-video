@@ -141,7 +141,7 @@ $("#show-inspector").onclick = () => toggleArea("inspector");
 // A click shows what it does; a double-click (or « Ajouter ») puts it on the
 // clip at the playhead; a tile can also be dropped on the timeline.
 let fxbCat = "Tous";
-const FAM_ICON = { text: "T", anim: "✦", image: "◐" };
+const FAM_ICON = { text: "T", anim: "✦", track: "◎", image: "◐" };
 
 function drawEffectsBrowser() {
   const cats = ["Tous", ...effectsByCategory().map(([c]) => c), ...(state.presets.length ? ["Mes préréglages"] : [])];

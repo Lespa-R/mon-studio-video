@@ -53,12 +53,22 @@ lib/effects-anim.mjs   animated elements (canvas space)     ← or here
 lib/effects-image.mjs  image treatments (filters, grain…)   ← or here
 lib/effects-captions.mjs the "Sous-titres" effect (draws video.captions)
 lib/effects-people.mjs name tags that follow each tracked person
+lib/effects-subject.mjs on the cut-out: halo, colour pop, pop-out frame, motion echo
+lib/effects-follow.mjs  follow a « Sujet »: spotlight, follow tag, tracker, orbit text
+lib/effects-camera.mjs  move the stage: reframe (follow the subject), stabilise (lock a spot)
+lib/effects-scene.mjs   pinned to the scenery: sun flare, route (several pins)
+lib/effects-blur.mjs    « Flouter »: blurred / pixelated layer over a followed object or the people
+lib/follow.mjs         « Sujet » (person / group / object / pin / fixed) → one path of boxes + GSAP helpers (pure)
+lib/stage-motion.mjs   the stage moving over time (reframe, stabilise) → GSAP on #stage (pure)
 lib/tracking.mjs       detections → one smooth track per person; follow paths (pure)
 lib/trim.mjs           trimming: shift effects / subtitles when the cut moves (pure)
 lib/textcut.mjs        montage par le texte: transcript tokens, removed passages, time maps,
                        Whisper output parsing (pure, no imports — the UI loads it too, as a module)
 lib/history.mjs        undo / redo of a clip's effects, subtitles, cut-out choice (in memory)
 lib/objects.mjs        « Objet choisi »: cut-out choices, clicked-object options (pure)
+lib/pins.mjs           « Fixé dans le décor »: pinned spots, track → GSAP mover tweens (pure)
+lib/keyframes.mjs      sampled path → GSAP: RDP simplify, 1 ms-short spans, steady sight, sight fades (pure)
+lib/util.mjs           helpers every effect module imports: esc, jsString, num, clamp, r1, r3, viewOf, unitOf, shortHash
 lib/shots.mjs          splitting a rush into shots: shot list clean-up, clip names (pure)
 lib/storage.mjs        disk usage: sorts every file into a kind, says what may be deleted (pure)
 lib/captions.mjs       subtitles: words → lines, edits, SRT in/out, chunking (pure)
@@ -75,6 +85,7 @@ tools/*.swift          Vision helpers: facedet (face box), personmatte (cut-out 
                        persontrack (bodies + faces, several people, N samples/s)
 tools/objtrack.py      SAM 2.1 follows a clicked object → grey mask video (personmatte --mask-video)
 tools/sam_worker.py    SAM 2.1 resident worker: instant mask for the object dialog's clicks
+tools/scenetrack.py    OpenCV follows a spot of the scenery (KLT + SIFT landmark) for pinned text
 tools/scenes.py        PySceneDetect shot detection, run with .venv/bin/python (Python 3.12)
 bin/behind.mjs         one-shot CLI
 test/*.test.mjs        node --test
@@ -122,7 +133,8 @@ Rules that keep compositions correct:
   positions — see `viewOf()` and `fitAndPlace()`. Canvas effects get the output
   frame as `video`; size them on `Math.min(width, height)`.
 - **Anything embedded in a `<script>` goes through `jsString()`**, and anything
-  in HTML/CSS through `esc()`.
+  in HTML/CSS through `esc()` — both from `lib/util.mjs`, with `num`, `clamp`,
+  `r1`, `r3`, `viewOf`, `unitOf`: import them, never redefine them.
 - **Deterministic only**: no `Math.random`, no `Date.now`, no infinite GSAP
   repeats (they give the root timeline an infinite duration). Grain uses a
   fixed-seed `feTurbulence` + a stepped tween.
@@ -133,7 +145,8 @@ Rules that keep compositions correct:
 - **Layers that stand in for the footage** (like `bg-replace`) get the class
   `footage-layer`: `compose.mjs` gives them the clip's grade.
 - **z-index**: bg 1 · replaced background 2 · behind 10–11 · cut-out 50 · tint 55 · front 60–62 · animations 63–68 · logo 84 · progress 86 ·
-  vignette 80 · grain 82 · bands 88 · fade 90.
+  vignette 80 · grain 82 · bands 88 · fade 90. A `<video>` on the stage gets
+  1 from `:where(#stage video)`, which weighs nothing: its own `#id` rule wins.
 - Image treatments return `filters: { footage: [...], bg: [...] }` instead of
   markup; `compose.mjs` concatenates them per layer.
 - **Brand kit.** Colour params default to tokens (`"brand:primary"`, `"brand:text"`…)
@@ -155,12 +168,28 @@ Rules that keep compositions correct:
   `pathTimeline()` from `lib/tracking.mjs` on a *mover* wrapper, and animate the
   element inside it. `drag: { offset: true }` (or `follow: "<anchor value>"`)
   makes a drag write `ox` / `oy` offsets instead of a fixed position.
+- **Pinned to the scenery.** `pin: { key }` on the effect (or `pin: {}` for
+  one that is always pinned) + a `PIN_OPTION` in that select + `pinFields()`;
+  x / y are where the spot was at `params.pinAt` (null = the effect's start).
+  The server follows each spot (`ensurePins`, `media/<id>-pin-<key>.json`) and
+  `build()` finds the track in `video.pins[fx.id]`: wrap the element with
+  `pinWrap()` (a mover with its transform-origin on the spot, plus an
+  `-anchor` marker the preview reads on a drop) and animate it with
+  `pinTimeline(pinnedPath(video, fx.id, t, p.pinFollow), anchor)`.
+  `drag: { pin: "<value>" }` (or `pin: true`) makes a drop re-pin it where it
+  lands, at that moment. Moments in params (`pinAt`, `pinAt0`…, an object's
+  `t`) move with a trim (`shiftForTrim`) and are reset when the effect goes
+  to another clip (`portableParams`: presets, pastes).
 - **Placement vs animation transforms**: put a `translate(-50%)` centring on a
   wrapper and tween the child — a GSAP `x`/`y` tween overwrites the transform.
 
 Then: a test in `test/compose.test.mjs` (at least "builds for a typical clip",
 covered by the catalogue smoke test), a real render checked frame by frame, and
-a line in the README's effect table.
+a line in the README's effect table. `test/timelines.test.mjs` runs every
+effect's timeline against a recorder — whole clip, normal and very short
+windows, every value of the selects that shape it: no two tweens of one
+element may fight over a property, none may run past the window. Add a select
+there if a new one changes the timeline's shape.
 
 The HyperFrames catalogue (`npx hyperframes@0.8.75 catalog`) has ~400 blocks —
 lower thirds, transitions, captions, light leaks — worth reading for ideas;
@@ -226,6 +255,67 @@ can show black in Chrome. A trim maps the clicked time through the cut, or
 drops the object if its frame was cut away. **Install sam2 from Meta's
 GitHub, never PyPI's "sam2"** (a third-party fork).
 
+## Effets de suivi (2026-10-06)
+
+Family « Suivi » (amber). Shared pieces:
+- **« Sujet »** (`lib/follow.mjs`): `sourceFields()` + `followBoxes(fx, video, t)`
+  → `[{ t, x, y, w, h, seen }]` whatever is followed — people (`video.people`,
+  `needsTracks: followsPeople`), an object clicked *in the effect*
+  (`params.object`, field type `object` in the inspector, the object dialog
+  with a `target`; `ensureObjects` runs objtrack with `--boxes` and caches
+  `media/<id>-obj-<key>.mp4|json` → `video.objects`), a pin, a fixed point.
+  `boxTimeline` / `sizeTimeline` / `boxTweens` animate a mover and a box
+  (the spotlight tweens its oval as CSS variables `--rx` / `--ry`: a pane
+  scaled down with a shrinking subject stopped covering the frame). Every
+  follow effect puts an `-anchor` marker on its subject in the mover: a drop
+  in « point du décor » mode re-pins there. `drag.only` limits handles to the
+  modes where a drag means something.
+- **The cut-out as material**: `video.files.fg` lets an effect copy the fg
+  video — a drop-shadow halo under it (z 49), delayed copies for the echo
+  (`data-start` k × gap, `data-media-start` = window start). Colour pop is a
+  `backdrop-filter` pane at z 9 (scenery only, not the text at 10–11).
+- **Two layers from one effect**: `htmlFront` goes in front of the cut-out
+  (orbit text: back half behind, front half before).
+- **Dynamic space**: `effect.space` may be a function of fx — arrow, circle,
+  emoji, counter go on the stage when pinned (`attach` / `position` = "pin").
+- **Stage motion** (`stageMotion` from build, first one wins): compose emits
+  GSAP on `#stage` (x, y, scale, origin 0 0) via `stage-motion.mjs`, clamped
+  so no edge shows; ramps in and out of the window.
+- **Several pins**: `def.pinPoints(fx)` → `video.pins["<fxId>:<i>"]`; the
+  preview gives each `data-drag-pt` element its own handle.
+- **Blur**: ffmpeg makes the layer once (`makeBlurLayer`: blurred / pixelated
+  / black, alphamerge with the widened mask) → `media/<id>-blur-<key>.webm`;
+  laid at z 52, above the cut-out, graded like the footage (`footage-layer`).
+- **Order before a preview or a render** (`ensureEffectData` in server.mjs):
+  people's tracks, scenery pins, objects, the cut-out, blur layers (a blur of
+  the people is made from the cut-out, keyed by its signature). A render
+  composes its snapshot, which takes the live clip's new matte signature.
+- **Preview-only guides**: class `studio-guide` (stabilise's crosshair) is
+  opacity 0 in the export, made visible by server/player.mjs.
+- **Lint**: movers, rings and panes that travel past the frame on purpose
+  carry `data-layout-allow-overflow`; one element's attributes are tweened in
+  one series (the lint counts every `attr` as one property: a route line
+  tweens x1 y1 x2 y2 together); with a moving camera `#stage` has no CSS
+  transform (GSAP places it from 0: HyperFrames' static guard flags a CSS
+  transform that GSAP also animates).
+
+## Fixé dans le décor (scenetrack)
+
+The text must stay on a spot of the *scenery*, so nothing but the spot's
+surroundings moves it: a background median is pulled by the ground close to
+a walking camera (it moves much faster), and corners along a ridge or a
+horizon say nothing reliable about a turn. Two layers: frame-to-frame KLT
+around the spot (median move, smooth) and, every 4 frames — every other one
+while lost — the spot as it looked at `pinAt` found again with SIFT + RANSAC
+(ORB failed after a 12 s detour and a 30° roll; SIFT at 960 px did not). The
+landmark eases drift away, gives zoom and turn without accumulating error,
+and brings the text back when the camera returns. Frames are streamed
+(backwards in 90-frame chunks), so memory does not grow with the clip.
+Visibility runs under 0.35 s are merged (`steadySight`), or the text blinks;
+keyframe durations are 1 ms short (`span`), or float rounding makes tweens
+touch — both in `lib/keyframes.mjs`, shared with the people's paths and the
+camera.
+
 ## Undo
 
 Every non-GET request on `/api/videos/:id/(effects|captions|matte)` is
@@ -262,6 +352,15 @@ lost behind the step.
   translate (the chapter panel once stayed on screen). Let the `fromTo` set
   the start. And transforms do nothing on an inline `<span>`: make it
   `inline-block`.
+- **`#stage video` outweighed every effect's own `#id` rule** (an id and a
+  type beat an id alone): the halo, the echo's copies and the blurred layer
+  all sat at z-index 1, under the cut-out — « Flouter toutes les personnes »
+  hid nobody (2026-10-06). The base rule is `:where(#stage video)`. Check a
+  layer with `getComputedStyle(el).zIndex` in the preview, not by reading CSS.
+- **A tilt (3D transform) set by the timeline at 0 lands before a late
+  font**: with a brand font, the setup scripts run after the first seek, and
+  measured a tilted title. Static transforms that must not disturb a
+  measurement go in the setup script, after it (the title's perspective).
 - **Subtitles need macOS permission.** `Transcribe.app` is launched with
   `open -W -n -g` so the Speech Recognition prompt names it (a bare CLI would
   be attributed to whatever terminal started the studio). If the answer was

@@ -503,6 +503,50 @@ keyed by clip length so a trim refreshes them). `POST …/split` cuts each kept
 shot from the working copy (`cutClip`, frame-exact re-encode) and registers it
 as a new clip right after the rush (`registerClip({ after })`).
 
+## Fixé dans le décor (scene tracking)
+
+Pinnable effects (`title`, `behind-text` with the "pin" placement, and
+`scene-label`, always pinned) store the spot as x / y (% of the source frame)
+at `params.pinAt`. `compose.pinRequests()` lists them with their stretch
+(window widened to half-seconds, and to `pinAt`); the server keys each by
+spot, moment, stretch and file (`pinKey`), runs `tools/scenetrack.py` once
+(`media.trackScene`), caches the result in memory and in
+`media/<id>-pin-<key>.json`, and hands it to `build()` as `video.pins`.
+`pinPath()` cuts the track to the window (move only, + zoom, or + turn per
+`pinFollow`), `steadySight()` removes visibility flicker, `simplifyPin()`
+drops redundant keyframes (RDP over move, zoom and turn) and `pinTimeline()`
+writes GSAP tweens on a mover (`pinWrap()`) whose transform-origin is the
+spot, with opacity fades while the spot is out of sight. The generic pieces —
+RDP (`simplifyBy`), 1 ms-short durations (`span`), `steadySight`,
+`sightFades`, `holdSeen` — live in `lib/keyframes.mjs`, shared with the
+people's paths, the followed subjects and the moving camera. A drop on the
+preview reads the spot's current position from the `-anchor` marker and
+re-pins there, at the preview's time. `shiftForTrim` maps `pinAt` (and a
+route's `pinAt0`…) through a cut, and the server drops the tracks; a preset
+or a paste to another clip resets them (`portableParams`).
+
+## Effets de suivi
+
+Built on four sources of position — the cut-out (fg), tracked people, objects
+clicked in an effect (SAM 2: mask + per-frame boxes), and scenery pins —
+behind one interface, `followBoxes()` (lib/follow.mjs). Effects modules:
+effects-subject (cut-out), effects-follow (a « Sujet »), effects-camera (the
+stage moves: lib/stage-motion.mjs), effects-scene (pins, a route with several),
+effects-blur (an ffmpeg-made alpha layer). The server ensures, before a preview
+or a render (`ensureEffectData`): people tracks, pins, objects
+(`ensureObjects`), the matte, blur layers (`ensureBlurs`) — each cached under
+a key that changes with what it depends on (one `once()` per key, so two
+previews share the work), all listed by the Storage page as caches.
+
+Layering: every stage `<video>` gets z-index 1 from `:where(#stage video)`,
+a rule of no weight, so an effect's own `#id` rule decides — the halo (49)
+and the echo's copies (48…) under the cut-out (50), the blurred layer (52)
+above it, graded like the footage (`footage-layer`). The spotlight's oval is
+two CSS variables tweened by GSAP inside a fixed pane 2.6 × the frame, which
+covers it wherever the subject goes. `test/timelines.test.mjs` runs every
+effect's timeline against a recorder and fails on two tweens of one element
+fighting over a property, or on anything past the effect's window.
+
 ## Known limits
 
 - **One person.** `VNGeneratePersonSegmentationRequest` returns a single

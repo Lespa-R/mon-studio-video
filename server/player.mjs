@@ -5,7 +5,9 @@
 // data-start / data-duration / data-media-start, and drives the GSAP timeline
 // off the footage's clock, keeping the cut-out and the audio in step.
 export function playable(html) {
-  html = html.replace("<head>", `<head>\n    <base href="/">`);
+  // Guides (a stabilisation's crosshair…) are invisible in the export and
+  // shown here only.
+  html = html.replace("<head>", `<head>\n    <base href="/">\n    <style>.studio-guide { opacity: 1 !important; }</style>`);
   html = html.replace("</body>", `
     <script>
       (function () {

@@ -60,6 +60,8 @@ def main():
     ap.add_argument("--fps", type=float, default=30.0)
     ap.add_argument("--level", type=int, default=2, help="size picked for a single click (0 part … 2 whole)")
     ap.add_argument("--model", required=True)
+    ap.add_argument("--boxes", default=None, help="also write where the object is, frame by frame (JSON)")
+    ap.add_argument("--size", default=None, help="the source frame, WxH, for --boxes in source pixels")
     a = ap.parse_args()
 
     points = json.loads(a.points)
@@ -138,12 +140,31 @@ def main():
             "-r", str(a.fps), "-i", "-", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p",
             "-g", "30", a.out], stdin=subprocess.PIPE)
         blank = np.zeros((h, w), dtype=np.uint8)
+        boxes = {"x": [], "y": [], "w": [], "h": [], "seen": []}
+        sw, sh = (int(v) for v in a.size.split("x")) if a.size else (w, h)
+        kx, ky = sw / w, sh / h
         for i in range(n):
             m = masks.get(min(i // stride, len(sampled) - 1))
             enc.stdin.write(blank.tobytes() if m is None else (m.astype(np.uint8) * 255).tobytes())
+            # Where the object is: the box around its pixels (source px).
+            ys, xs = (np.nonzero(m) if m is not None else ((), ()))
+            if len(xs) >= 20:
+                x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
+                boxes["x"].append(round((x0 + x1) / 2 * kx, 1))
+                boxes["y"].append(round((y0 + y1) / 2 * ky, 1))
+                boxes["w"].append(round((x1 - x0) * kx, 1))
+                boxes["h"].append(round((y1 - y0) * ky, 1))
+                boxes["seen"].append(1)
+            else:
+                for key in ("x", "y", "w", "h"):
+                    boxes[key].append(boxes[key][-1] if boxes[key] else 0)
+                boxes["seen"].append(0)
         enc.stdin.close()
         if enc.wait() != 0:
             sys.exit("objtrack: encoding failed")
+        if a.boxes:
+            with open(a.boxes, "w") as f:
+                json.dump({"start": 0, "step": round(1 / a.fps, 6), "width": sw, "height": sh, **boxes}, f)
         print(json.dumps({"frames": n, "tracked": len(masks), "width": w, "height": h}))
     finally:
         shutil.rmtree(work, ignore_errors=True)

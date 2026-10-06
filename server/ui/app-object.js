@@ -100,10 +100,13 @@ async function askObjMask() {
   }
 }
 
-function openObject(v, choice) {
+// `target` (optional): an effect's « Sujet » object instead of the clip's
+// cut-out — { existing, save(object) }.
+function openObject(v, choice, target = null) {
   objState.video = v.id;
   objState.choice = choice;
-  const existing = v.matteOptions?.object;
+  objState.target = target;
+  const existing = target ? target.existing : v.matteOptions?.object;
   objState.points = existing ? existing.points.map((p) => ({ ...p })) : [];
   objState.level = existing?.level ?? 2;
   objState.t = existing ? existing.t : Math.min(currentPreviewTime() || 0, v.duration - 0.05);
@@ -178,6 +181,14 @@ $("#obj").addEventListener("keydown", (e) => {
 
 $("#obj-ok").onclick = async () => {
   const id = objState.video;
+  const object = { t: objState.t, points: objState.points, level: objState.level };
+  if (objState.target) {
+    // An effect's subject: saved on the effect, followed at the next preview.
+    const { save } = objState.target;
+    closeObject();
+    setStatus("Suivi de l'objet dans tout le clip à l'aperçu… (environ 4 images par seconde)");
+    return save(object);
+  }
   try {
     await api(`/api/videos/${id}/matte`, {
       method: "PATCH", headers: { "content-type": "application/json" },

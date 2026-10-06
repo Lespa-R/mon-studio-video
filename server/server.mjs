@@ -9,15 +9,18 @@ import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { catalogue, defaultParams, byType, isTimed } from "../lib/effects.mjs";
+import { catalogue, defaultParams, byType, portableParams } from "../lib/effects.mjs";
 import { Store, newId } from "../lib/store.mjs";
-import { compose, needsMatte, needsTracking } from "../lib/compose.mjs";
+import { compose, needsMatte, needsTracking, pinRequests } from "../lib/compose.mjs";
+import { pinKey } from "../lib/pins.mjs";
+import { objectRequest, objectKey } from "../lib/follow.mjs";
+import { blurRequest } from "../lib/effects-blur.mjs";
 import { buildTracks } from "../lib/tracking.mjs";
 import { normaliseTrim, shiftForTrim } from "../lib/trim.mjs";
 import { normaliseCuts, keptSegments, keptLength, localOf, sourceOf as sourceOfTime, settleCuts } from "../lib/textcut.mjs";
 import { SENSITIVITIES, normaliseShots, shotName } from "../lib/shots.mjs";
 import { makeHistory } from "../lib/history.mjs";
-import { CUTOUT_CHOICES, cutoutChoice, normaliseObject } from "../lib/objects.mjs";
+import { CUTOUT_CHOICES, normaliseObject } from "../lib/objects.mjs";
 import { ASPECTS, SIZES, FITS, FOCUSES, FILLS, normaliseFormat } from "../lib/format.mjs";
 import * as media from "../lib/media.mjs";
 import { makeGuard } from "../lib/guard.mjs";
@@ -128,6 +131,182 @@ async function ensureTracks(video, job) {
 
 // The clip as effects see it: with its people, when they have been tracked.
 const withPeople = (video) => ({ ...video, people: peopleCache.get(video.id) || null });
+
+// ------------------------------------------------------------ followed data
+// Effects can follow a spot of the scenery (pins), an object clicked in them
+// (objects), or hide something under a blurred layer (blurs). Each is made
+// once and kept in media/ under a key that changes with what made it — the
+// spot, the clicks, the moment, the window, the file — so a drag or a trim
+// makes it anew. The caches hold what has been read; `once` makes previews
+// landing together share one computation.
+
+const pinCache = new Map();    // `${videoId}:${key}` -> track
+const objectCache = new Map(); // `${videoId}:${key}` -> boxes
+const inFlight = new Map();    // `${kind}:${videoId}:${key}` -> promise
+
+function once(id, make) {
+  if (!inFlight.has(id)) inFlight.set(id, make().finally(() => inFlight.delete(id)));
+  return inFlight.get(id);
+}
+const followedBusy = (videoId) => [...inFlight.keys()].some((k) => k.split(":")[1] === videoId);
+
+// « Fixé dans le décor » (lib/pins.mjs): each pinned spot is followed
+// through its window by tools/scenetrack.py → media/<id>-pin-<key>.json.
+const pinFile = (video, key) => path.join(MEDIA, `${video.id}-pin-${key}.json`);
+
+async function ensurePins(video, job) {
+  const reqs = pinRequests(video);
+  for (const [i, req] of reqs.entries()) {
+    const key = pinKey(req, req, video);
+    const id = `${video.id}:${key}`;
+    if (pinCache.has(id)) continue;
+    await once(`pin:${id}`, async () => {
+      let track;
+      try {
+        track = JSON.parse(await fsp.readFile(pinFile(video, key), "utf8"));
+      } catch {
+        if (job) { job.message = "Suivi du décor…"; job.progress = i / reqs.length; }
+        track = await media.trackScene(path.join(MEDIA, mediaNames(video).bg), {
+          t: req.t, x: req.x, y: req.y, fps: video.fps, from: req.from, to: req.to,
+          onProgress: (p) => { if (job) job.progress = (i + p) / reqs.length; },
+        });
+        await writeAtomic(pinFile(video, key), JSON.stringify(track));
+      }
+      pinCache.set(id, track);
+    });
+  }
+}
+
+// The clip with its pinned effects' tracks, as far as they are known.
+function withPins(video) {
+  const pins = {};
+  for (const req of pinRequests(video)) {
+    const track = pinCache.get(`${video.id}:${pinKey(req, req, video)}`);
+    if (track) pins[req.fxId] = track;
+  }
+  return { ...video, pins };
+}
+
+// An effect whose « Sujet » is an object clicked in it (lib/follow.mjs): SAM 2
+// follows it (tools/objtrack.py) → its mask, media/<id>-obj-<key>.mp4, and
+// where it is frame by frame (.json).
+const objectFiles = (video, key) => ({
+  mask: `${video.id}-obj-${key}.mp4`,
+  boxes: path.join(MEDIA, `${video.id}-obj-${key}.json`),
+});
+
+function objectRequests(video) {
+  const out = [];
+  for (const fx of video.effects || []) {
+    if (fx.enabled === false) continue;
+    const req = objectRequest(fx);
+    if (req) out.push({ fxId: fx.id, req, key: objectKey(req, video) });
+  }
+  return out;
+}
+
+async function ensureObjects(video, job) {
+  const list = objectRequests(video);
+  for (const [i, { req, key }] of list.entries()) {
+    const id = `${video.id}:${key}`;
+    if (objectCache.has(id)) continue;
+    await once(`obj:${id}`, async () => {
+      const files = objectFiles(video, key);
+      let boxes;
+      try {
+        boxes = JSON.parse(await fsp.readFile(files.boxes, "utf8"));
+        await fsp.access(path.join(MEDIA, files.mask));
+      } catch {
+        if (!media.samStatus().available) throw new Error("SAM 2 n'est pas installé : impossible de suivre l'objet.");
+        if (job) { job.message = "Suivi de l'objet image par image (SAM 2)…"; job.progress = i / list.length; }
+        await media.trackObject(path.join(MEDIA, mediaNames(video).bg), path.join(MEDIA, files.mask), {
+          ...req, fps: video.fps, boxes: files.boxes, size: { width: video.width, height: video.height },
+          onProgress: (p) => { if (job) job.progress = (i + p) / list.length; },
+        });
+        boxes = JSON.parse(await fsp.readFile(files.boxes, "utf8"));
+      }
+      objectCache.set(id, { ...boxes, mask: files.mask });
+    });
+  }
+}
+
+// The clip with its effects' followed objects, as far as they are known.
+function withObjects(video) {
+  const objects = {};
+  for (const { fxId, key } of objectRequests(video)) {
+    const found = objectCache.get(`${video.id}:${key}`);
+    if (found) objects[fxId] = found;
+  }
+  return { ...video, objects };
+}
+
+// « Flouter » (lib/effects-blur.mjs): the blurred layer, made from the
+// followed object's mask or the people's cut-out → media/<id>-blur-<key>.webm.
+// Called once both exist (ensureEffectData).
+const blurFile = (video, key) => `${video.id}-blur-${key}.webm`;
+
+async function ensureBlurs(video, job) {
+  for (const req of (video.effects || []).map((fx) => blurRequest(fx, video)).filter(Boolean)) {
+    const name = blurFile(video, req.key);
+    if (fs.existsSync(path.join(MEDIA, name))) continue;
+    await once(`blur:${video.id}:${req.key}`, async () => {
+      const mask = req.source === "people"
+        ? mediaNames(video).fg
+        : objectFiles(video, objectKey(req.object, video)).mask;
+      if (job) job.message = "Flou de ce qui doit rester caché…";
+      await media.makeBlurLayer(path.join(MEDIA, mediaNames(video).bg), path.join(MEDIA, mask), path.join(MEDIA, name), {
+        mode: req.mode, strength: req.strength, alpha: req.source === "people",
+        width: video.width, height: video.height, fps: video.fpsExact || video.fps,
+      });
+    });
+  }
+}
+
+// The clip with its blur layers, as far as they exist.
+function withBlurs(video) {
+  const blurs = {};
+  for (const fx of video.effects || []) {
+    const req = blurRequest(fx, video);
+    if (req && fs.existsSync(path.join(MEDIA, blurFile(video, req.key)))) blurs[fx.id] = blurFile(video, req.key);
+  }
+  return { ...video, blurs };
+}
+
+// The clip as effects see it: with everything followed so far.
+const withData = (video) => withBlurs(withObjects(withPins(withPeople(video))));
+
+// Everything a clip's effects need before it can be composed, in order:
+// people's tracks, scenery and object tracks, the cut-out, blur layers.
+// `video` is what gets composed (a render's snapshot); `live` is the clip as
+// it is now, whose cut-out is made — the snapshot takes its signature, which
+// names the blur layers made from it.
+async function ensureEffectData(video, job, live = video) {
+  if (needsTracking(video)) await ensureTracks(live, job);
+  await ensurePins(video, job);
+  await ensureObjects(video, job);
+  if (needsMatte(video)) {
+    await ensureMatte(live, job);
+    video.matteSignature = live.matteSignature;
+  }
+  await ensureBlurs(video, job);
+}
+
+// Forget what was read of a clip's tracks (its files changed, or it went).
+function forgetFollowed(videoId) {
+  for (const cache of [pinCache, objectCache]) {
+    for (const k of [...cache.keys()]) if (k.startsWith(`${videoId}:`)) cache.delete(k);
+  }
+}
+
+// A clip's files changed (trim, delete): its tracks and blur layers are stale.
+async function dropPins(video) {
+  forgetFollowed(video.id);
+  let names = [];
+  try { names = await fsp.readdir(MEDIA); } catch { /* no media yet */ }
+  for (const n of names) {
+    if (["-pin-", "-obj-", "-blur-"].some((k) => n.startsWith(`${video.id}${k}`))) await fsp.rm(path.join(MEDIA, n), { force: true });
+  }
+}
 
 // One cut-out per clip at a time. Two previews landing close together (the
 // montage and the library, or an add followed by a tweak) used to start two
@@ -417,12 +596,14 @@ function commitTrim(video) {
 const storage = makeStorage({
   ROOT, MEDIA, RENDERS, store, send, readJson, saveState,
   promos: () => promos,
-  busy: (id) => mattesInFlight.has(id) || peopleInFlight.has(id) || trimsInFlight.has(id) || transcriptsInFlight.has(id) || sdrInFlight.has(id),
+  busy: (id) => mattesInFlight.has(id) || peopleInFlight.has(id) || trimsInFlight.has(id) || transcriptsInFlight.has(id) || sdrInFlight.has(id)
+    || followedBusy(id),
   forget(it) {
     const video = it.videoId ? findVideo(it.videoId) : null;
     if (video && it.kind === "matte") { delete video.matteSignature; delete video.objectSignature; }
     if (video && it.kind === "people") { peopleCache.delete(video.id); delete video.peopleCount; }
     if (video && it.kind === "transcript") delete video.transcriptLang;
+    if (video && it.kind === "pin") forgetFollowed(video.id);
     if (video && it.kind === "original") commitTrim(video);
     if (it.kind === "asset" && it.font) store.state.fonts = (store.state.fonts || []).filter((f) => f.file !== it.name);
   },
@@ -648,6 +829,7 @@ async function removeVideo(res, id) {
   project.videos = project.videos.filter((v) => v.id !== id);
   history.forget(id);
   await dropMedia(video);
+  await dropPins(video);
   if (store.state.activeVideo === id) store.state.activeVideo = null;
   await saveState();
   send(res, 200, { ok: true });
@@ -834,7 +1016,7 @@ async function handleApi(req, res, url) {
         preset = store.addPreset({
           name: name || fx.name || byType(fx.type)?.label,
           type: fx.type,
-          params: { ...fx.params },
+          params: portableParams(fx.type, fx.params),
           collectionId: collectionId ?? null,
         });
       } else {
@@ -860,8 +1042,7 @@ async function handleApi(req, res, url) {
       const video = store.video(url.searchParams.get("video"));
       if (!video) return send(res, 400, { error: "no clip to preview against" });
       const job = startJob("preset-prepare", async (j) => {
-        if (byType(preset.type)?.needsTracks?.({ params: preset.params })) await ensureTracks(video, j);
-        if (byType(preset.type)?.needsMatte) await ensureMatte(video, j);
+        await ensureEffectData(presetSolo(preset, video), j, video);
         return { ready: true };
       });
       return send(res, 200, { job });
@@ -927,15 +1108,17 @@ async function handleApi(req, res, url) {
       // from its type's schema: unknown types are dropped, unknown params
       // ignored, and every copy gets an id of its own.
       if (req.method === "POST" && subId === "paste") {
-        const { effects = [], replace = false } = await readJson(req);
+        const { effects = [], replace = false, from = null } = await readJson(req);
         const copies = [];
         for (const src of Array.isArray(effects) ? effects : []) {
           const def = byType(src?.type);
           if (!def) continue;
-          const params = defaultParams(src.type);
+          let params = defaultParams(src.type);
           for (const f of def.schema) {
             if (src.params && src.params[f.key] !== undefined) params[f.key] = src.params[f.key];
           }
+          // From another clip: no clicked object, no pinned moment of that clip.
+          if (from !== video.id) params = portableParams(src.type, params);
           const start = Math.max(0, Math.min(Number(src.start) || 0, video.duration - 0.1));
           copies.push({
             id: newId("fx_"),
@@ -1203,6 +1386,9 @@ async function handleApi(req, res, url) {
           // lands on a frame); with them, the segments are the reference.
           const shifted = shiftForTrim(video, from,
             to.cuts.length ? to : { start: to.start, end: to.start + info.duration, cuts: [] });
+          // Its scenery and object tracks are for the old cut (shiftForTrim
+          // moved the moments they were pinned or clicked at).
+          await dropPins(video);
           video.effects = shifted.effects;
           video.captions = shifted.captions;
           video.ext = ext;
@@ -1369,8 +1555,7 @@ async function handleApi(req, res, url) {
     if (sub === "prepare" && req.method === "POST") {
       const job = startJob("prepare", async (j) => {
         await ensureSdr(video, j);
-        if (needsTracking(video)) await ensureTracks(video, j);
-        if (needsMatte(video)) await ensureMatte(video, j);
+        await ensureEffectData(video, j);
         store.state.activeVideo = video.id;
         await saveState();
         return { ready: true, peopleCount: video.peopleCount ?? null };
@@ -1385,12 +1570,12 @@ async function handleApi(req, res, url) {
       const snapshot = structuredClone(video);
       const format = formatOf(video.id);
       const brand = brandOf(video.id);
-      const html = needsTracking(snapshot)
-        ? async (job) => {
-          await ensureTracks(video, job);
-          return compose(withPeople(snapshot), filesOf(snapshot), format, brand);
-        }
-        : compose(withPeople(snapshot), filesOf(snapshot), format, brand);
+      // Composed from the clip as it was when « Exporter » was clicked, once
+      // what its effects follow is ready.
+      const html = async (job) => {
+        await ensureEffectData(snapshot, job, video);
+        return compose(withData(snapshot), filesOf(snapshot), format, brand);
+      };
       return send(res, 200, {
         job: queueRender({ name: video.name, html, mattes: needsMatte(video) ? [video] : [], videoId: video.id }),
       });
@@ -1403,11 +1588,17 @@ async function handleApi(req, res, url) {
 async function servePreview(res, id) {
   const video = findVideo(id);
   if (!video) return send(res, 404, { error: "unknown video" }, "text/plain");
-  send(res, 200, playable(compose(withPeople(video), filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
+  send(res, 200, playable(compose(withData(video), filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
 }
 
-// The library's preview: the clip with this preset as its only effect, so you
-// can tune a look without it fighting whatever else is on the timeline.
+// The library's preview: the clip with this preset as its only effect (over
+// the whole clip), so you can tune a look without it fighting whatever else
+// is on the timeline.
+const presetSolo = (preset, video) => ({
+  ...video,
+  effects: [{ id: "fx_preset", type: preset.type, name: preset.name, enabled: true, start: 0, duration: null, params: preset.params }],
+});
+
 async function servePresetPreview(res, presetId, videoId) {
   const preset = store.preset(presetId);
   if (!preset) return send(res, 404, { error: "unknown preset" }, "text/plain");
@@ -1422,19 +1613,7 @@ async function servePresetPreview(res, presetId, videoId) {
       </body>`, "text/html");
   }
 
-  const solo = {
-    ...video,
-    effects: [{
-      id: "fx_preset",
-      type: preset.type,
-      name: preset.name,
-      enabled: true,
-      start: 0,
-      duration: null,
-      params: preset.params,
-    }],
-  };
-  send(res, 200, playable(compose(withPeople(solo), filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
+  send(res, 200, playable(compose(withData(presetSolo(preset, video)), filesOf(video), formatOf(video.id), brandOf(video.id))), "text/html");
 }
 
 // ---------------------------------------------------------------- guard

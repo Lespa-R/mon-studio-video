@@ -114,7 +114,7 @@ $("#matte-model").onchange = async (e) => {
 $("#fx-copy").onclick = () => {
   const v = videoById(selected);
   if (!v || !v.effects.length) return;
-  setClipboard({ from: v.name, effects: v.effects.map(effectData) });
+  setClipboard({ from: v.name, fromId: v.id, effects: v.effects.map(effectData) });
   setStatus(`${v.effects.length} effet(s) copié(s). Sélectionne un autre clip et colle-les.`);
 };
 
@@ -140,7 +140,9 @@ $("#fx-paste").onclick = async () => {
   const { pasted } = await api(`/api/videos/${v.id}/effects/paste`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ effects: clipboard.effects, replace }),
+    // The clip they come from: pasted elsewhere, what was clicked or pinned
+    // on it (an object, a moment) is chosen again.
+    body: JSON.stringify({ effects: clipboard.effects, replace, from: clipboard.fromId || null }),
   });
   await refresh();
   preview();

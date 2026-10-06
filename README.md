@@ -101,7 +101,12 @@ Le menu est classé en trois familles : **Textes**, **Animations**, **Image**.
 | Effet | Ce qu'il fait |
 |---|---|
 | **Texte derrière moi** | le texte passe derrière ta tête et tes épaules |
-| **Titre devant** | titre animé au-dessus de l'image (haut, centre, bas, sous le menton) |
+| **Titre devant** | titre animé au-dessus de l'image (haut, centre, bas, sous le menton, fixé dans le décor) |
+| **Repère dans le décor** | un point sur un endroit du décor et son étiquette, qui y restent accrochés quand la caméra bouge |
+| **Halo néon** · **Couleur sur le sujet** · **Sortie du cadre** · **Écho de mouvement** | sur la découpe du sujet (voir « Effets de suivi ») |
+| **Projecteur** · **Étiquette qui suit** · **Viseur de suivi** · **Texte en orbite** | suivent un sujet : personne, objet cliqué, point du décor |
+| **Recadrage qui suit le sujet** · **Stabilisation sur un point** | bougent le cadre lui-même |
+| **Reflet de soleil** · **Tracé d'itinéraire** · **Flouter (anonymiser)** | accrochés au décor, ou qui cachent ce qui bouge |
 | **Bandeau (lower third)** | nom et fonction en bas à gauche |
 | **Titre surligné** | un coup de surligneur (ou un soulignement, un encadré) passe derrière la phrase |
 | **Mots-clés percutants** | des mots qui claquent l'un après l'autre — sépare-les par « / » |
@@ -205,6 +210,79 @@ sous-titres corrigés (pour YouTube, LinkedIn…).
 - Comme pour le rognage, **l'original est conservé** : rouvre la fenêtre pour
   remettre un passage, ou **Tout remettre**. Les effets et les sous-titres
   suivent ; les mots retirés disparaissent aussi des sous-titres.
+
+### Effets de suivi (famille « Suivi », ambre sur la timeline)
+
+Ils s'appuient sur ce que le studio sait repérer : la **découpe** du sujet (la
+personne, ou l'objet choisi dans « Découpe »), les **personnes** suivies, un
+**objet que tu cliques** dans l'effet (SAM 2) et un **point du décor** suivi
+quand la caméra bouge.
+
+**Sur la découpe du sujet**
+- **Halo néon** — un contour lumineux épouse la silhouette (halo, contour net ou
+  les deux), avec une pulsation douce ou marquée.
+- **Couleur sur le sujet** — le décor passe en noir et blanc (ou sépia, assombri,
+  terni), le sujet garde ses couleurs.
+- **Sortie du cadre (effet 3D)** — un cadre derrière le sujet, l'image assombrie
+  ou floutée autour : il en déborde. Fais glisser le cadre sur l'aperçu.
+- **Écho de mouvement** — des copies en retard suivent ses gestes (fantômes,
+  silhouettes de couleur ou blanches) : une traînée quand il bouge.
+
+**Qui suivent un sujet** — le menu **Sujet** : une personne (numérotée de gauche
+à droite), le groupe, **un objet** (bouton « 🎯 Choisir l'objet… », la même
+fenêtre que pour la découpe), un point du décor, ou un point fixe.
+- **Projecteur** — le décor s'assombrit, un rond de lumière suit le sujet.
+- **Étiquette qui suit** — un titre accroché à l'objet (au-dessus, en dessous, à côté).
+- **Viseur de suivi** — des crochets d'angle, une étiquette et les coordonnées en
+  direct, verrouillés sur le sujet.
+- **Texte en orbite** — un anneau de texte tourne autour du sujet, passe derrière
+  lui puis devant (découpe).
+
+**Qui bougent le cadre** (un seul à la fois)
+- **Recadrage qui suit le sujet** — en 9:16 depuis une vidéo horizontale, le cadre
+  glisse avec la personne ou l'objet, avec un zoom et une fluidité réglables.
+- **Stabilisation sur un point** — un endroit du décor reste immobile à l'écran :
+  fais glisser la cible jaune (visible seulement dans l'aperçu) sur un endroit
+  net. Le zoom donne la marge : il corrige les tremblements et les petits
+  mouvements, pas un grand panoramique.
+
+**Accrochés au décor**
+- **Reflet de soleil** — glissé sur le soleil, il y reste ; ses reflets traversent
+  l'image. Les personnes peuvent passer sous le reflet ou devant (découpe).
+- **Tracé d'itinéraire** — une ligne pointillée ou pleine se dessine entre 2 à 4
+  points du paysage (chacun se fait glisser), de « Départ » à « Arrivée ».
+- **Flèche, Cercle dessiné, Réaction emoji, Compteur** — **Accroche : Fixé dans le
+  décor** (ou la position du compteur) : ils restent sur leur endroit.
+- **Titre devant › Perspective** — posé au sol ou sur un mur, à combiner avec
+  « Fixé dans le décor ».
+- **Titre derrière une montagne** — « Texte derrière moi » fixé dans le décor,
+  animation **Lever**, et « Objet choisi » sur la montagne dans Découpe.
+
+**Flouter (anonymiser)** — un visage, une plaque, un passant (clique dessus), ou
+toutes les personnes : flou, pixels ou masque noir, qui suit dans tout le clip.
+
+### Texte fixé dans le décor (la caméra bouge, le texte reste sur place)
+
+Pour poser un texte sur un endroit du décor — une montagne, un bâtiment, la
+mer — et qu'il y reste quand la caméra bouge (panoramique, marche, drone) :
+
+- **Repère dans le décor** (effet) : un point, un trait et une étiquette
+  (titre + sous-titre), comme les légendes des vidéos de voyage ;
+- ou, pour **Titre devant** et **Texte derrière moi**, la position
+  **Fixé dans le décor (suit la caméra)**.
+
+Mets l'aperçu sur une image où l'endroit se voit bien et **fais glisser** le
+texte dessus : il y est accroché à ce moment-là. Au prochain aperçu, le studio
+suit l'endroit dans le clip (OpenCV, sur ton Mac ; quelques secondes pour une
+vingtaine de secondes de vidéo). Le texte **s'efface quand l'endroit sort du
+cadre et revient quand la caméra y retourne**. **Suivre** règle ce qu'il
+reprend du mouvement : le déplacement (conseillé), la taille en plus (on
+s'approche), ou aussi la rotation (la caméra penche).
+
+> Choisis un endroit avec du relief ou des contrastes (une crête, un bâtiment,
+> des rochers) : un ciel uni ou une mer plate ont peu de points à suivre. Et un
+> endroit loin de la caméra : tout près (le sable à tes pieds), il défile plus
+> vite que le reste et sort vite du cadre.
 
 ### Texte derrière un objet (fixe ou mobile)
 
@@ -335,6 +413,9 @@ Le texte derrière toi reste parfaitement calé, même recadré en vertical.
   Sélectionne un autre clip → **Coller** (en ajoutant ou en remplaçant).
 - **★** sur un effet l'enregistre comme **préréglage**, disponible sur tous tes
   projets dans le menu *Mes préréglages*.
+- Collé sur un autre clip (ou en préréglage), un effet oublie l'**objet cliqué**
+  et le **moment où il a été fixé dans le décor** : ils n'ont de sens que sur
+  leur clip. Rechoisis l'objet, refais glisser l'effet sur son endroit.
 - L'onglet **Bibliothèque d'effets** (en haut à droite) sert à créer et ranger
   tes préréglages par collections, avec un aperçu en direct.
 

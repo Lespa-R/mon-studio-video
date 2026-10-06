@@ -55,7 +55,8 @@ test("a straight walk needs only its two ends as keyframes", () => {
   const path = Array.from({ length: 31 }, (_, i) => ({ t: i / 10, x: 100 + i * 10, y: 300 }));
   const simple = simplifyPath(path);
   assert.deepEqual(simple.map((p) => p.t), [0, 3]);
-  assert.match(pathTimeline("#m", simple), /tl\.to\("#m", \{ x: 300, y: 0, duration: 3, ease: "none" \}, 0\);/);
+  // One millisecond short (lib/keyframes.mjs span): tweens never touch.
+  assert.match(pathTimeline("#m", simple), /tl\.to\("#m", \{ x: 300, y: 0, duration: 2\.999, ease: "none" \}, 0\);/);
 });
 
 test("text behind a person rides along their track", () => {

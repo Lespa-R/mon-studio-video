@@ -70,3 +70,19 @@ test("an effect moved by hand after a trim is not snapped back", () => {
   const b = shiftForTrim(clip([moved]), { start: 1.5, end: 5 }, { start: 0, end: 5 });
   assert.equal(b.effects[0].start, 2.5);
 });
+
+test("the moments an effect was pinned or clicked at move with the cut", () => {
+  const effect = {
+    id: "fx", type: "route", start: 0, duration: null,
+    params: { pinAt: 4, pinAt0: 2, pinAt1: null, object: { t: 1.5, points: [{ x: 0.5, y: 0.5, l: 1 }], level: 2 } },
+  };
+  const r = shiftForTrim(clip([effect]), { start: 0, end: 10 }, { start: 1, end: 10 });
+  assert.equal(r.effects[0].params.pinAt, 3);
+  assert.equal(r.effects[0].params.pinAt0, 1);
+  assert.equal(r.effects[0].params.pinAt1, null, "not set stays not set");
+  assert.equal(r.effects[0].params.object.t, 0.5);
+  // The frame the object was clicked on is cut away: it must be chosen again.
+  const gone = shiftForTrim(clip([effect]), { start: 0, end: 10 }, { start: 2, end: 10 });
+  assert.equal(gone.effects[0].params.object, null);
+  assert.equal(gone.effects[0].params.pinAt0, 0);
+});

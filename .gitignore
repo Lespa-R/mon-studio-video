@@ -29,3 +29,6 @@ models/
 
 # PySceneDetect virtualenv (Python 3.12, rebuilt with: python3.12 -m venv .venv && .venv/bin/pip install scenedetect)
 .venv/
+
+# Python bytecode (tools/*.py import each other)
+__pycache__/

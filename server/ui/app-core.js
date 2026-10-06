@@ -257,7 +257,7 @@ function drawStack() {
     nameInput.onkeydown = (e) => { if (e.key === "Enter") nameInput.blur(); };
 
     head.querySelector(".copy").onclick = () => {
-      setClipboard({ from: `${v.name} · ${fx.name || def.label}`, effects: [effectData(fx)] });
+      setClipboard({ from: `${v.name} · ${fx.name || def.label}`, fromId: v.id, effects: [effectData(fx)] });
       setStatus(`« ${fx.name || def.label} » copié. Sélectionne un autre clip et colle-le.`);
     };
 
@@ -293,14 +293,28 @@ function drawStack() {
     body.className = "fx-body";
     // Without a face the text is placed freely whatever "anchor" says
     // (see behind-text), so show the free controls, not the face ones.
-    const faceless = !v.face && def.schema.some((f) => f.key === "anchor") && fx.params.anchor !== "follow";
+    const faceless = !v.face && def.schema.some((f) => f.key === "anchor")
+      && fx.params.anchor !== "follow" && fx.params.anchor !== "pin";
     const shown = faceless ? { ...fx.params, anchor: "free" } : fx.params;
     for (const f of def.schema) {
       if (!fieldApplies(def, f, shown)) continue;
-      body.appendChild(field(f, shown[f.key], (value, extra = {}) =>
-        patch(v.id, fx.id, { params: { ...extra, [f.key]: value } }), fx.id));
+      body.appendChild(field(f, shown[f.key], (value, extra = {}) => {
+        // Choosing « Fixé dans le décor »: pinned where the text is now, at
+        // the moment the preview shows.
+        if (def.drag?.pin && f.key === (def.drag.pinKey || def.drag.key) && value === def.drag.pin) extra = { ...pinHere(fx, def), ...extra };
+        return patch(v.id, fx.id, { params: { ...extra, [f.key]: value } });
+      }, fx.id));
     }
     card.appendChild(body);
+
+    // Pinned to the scenery: how it works.
+    const pinnedFx = def.drag?.pin === true || (def.drag?.pin && fx.params[def.drag.pinKey || def.drag.key] === def.drag.pin);
+    if (pinnedFx) {
+      const w = document.createElement("div");
+      w.className = "hint";
+      w.textContent = "Fixé dans le décor : place l'aperçu sur une image où l'endroit se voit bien et fais-y glisser l'effet — il y reste accroché quand la caméra bouge, et s'efface quand l'endroit sort du cadre. Le suivi se calcule à l'aperçu (quelques secondes).";
+      card.appendChild(w);
+    }
 
     // Following people: say how many the clip has, once tracked.
     const follows = fx.type === "person-tags" || fx.params.anchor === "follow";
@@ -374,6 +388,25 @@ function field(f, value, onChange, tagId) {
     }
     input.onchange = () => onChange(input.value);
     wrap.appendChild(input);
+  } else if (f.type === "object") {
+    // An object followed by the effect: clicked in the object window
+    // (app-object.js), followed by SAM 2 at the next preview.
+    const holder = document.createElement("div");
+    holder.className = "objpick";
+    input = document.createElement("button");
+    input.type = "button";
+    input.textContent = value ? "🎯 Changer l'objet…" : "🎯 Choisir l'objet…";
+    const note = document.createElement("span");
+    note.className = "objnote";
+    note.textContent = value ? `cliqué à ${Number(value.t).toFixed(1).replace(".", ",")} s` : "aucun objet choisi";
+    input.onclick = () => {
+      const v = videoById(selected);
+      if (!v) return;
+      if (!state.options?.sam?.available) return setStatus("SAM 2 n'est pas installé sur ce Mac (voir le README).", true);
+      openObject(v, null, { existing: value || null, save: (object) => onChange(object) });
+    };
+    holder.append(input, note);
+    wrap.appendChild(holder);
   } else if (f.type === "range") {
     // Slider for feel, number box for precision — and the box accepts
     // values beyond the slider's range when you need to push further.
@@ -538,6 +571,45 @@ function field(f, value, onChange, tagId) {
   // Tag every control so refresh() can put the caret back where it was.
   wrap.querySelectorAll("input, select").forEach(tag);
   return wrap;
+}
+
+// Where an effect is on the preview right now (% of the source frame) and
+// the preview's time: the spot and moment it gets pinned at when « Fixé
+// dans le décor » is chosen, so it stays where it was.
+function pinHere(fx, def) {
+  const out = { pinAt: Math.round((currentPreviewTime() || 0) * 1000) / 1000 };
+  try {
+    const doc = $("#frame iframe").contentDocument;
+    const stage = doc.getElementById("stage");
+    if (!stage) return out;
+    const sr = stage.getBoundingClientRect();
+    const k = sr.width / stage.offsetWidth || 1;
+    const at = (x, y) => Object.assign(out, {
+      x: Math.round(((x - sr.left) / k / stage.offsetWidth) * 1000) / 10,
+      y: Math.round(((y - sr.top) / k / stage.offsetHeight) * 1000) / 10,
+    });
+    // Placed by x / y on the screen (arrow, circle, emoji): the same point.
+    if (def?.drag?.delta) {
+      const root = doc.getElementById("root").getBoundingClientRect();
+      return at(root.left + (Number(fx.params.x ?? 50) / 100) * root.width, root.top + (Number(fx.params.y ?? 50) / 100) * root.height);
+    }
+    // Following a subject: the marker on it.
+    const marker = doc.getElementById(fx.id + "-anchor");
+    if (marker) {
+      const r = marker.getBoundingClientRect();
+      return at(r.left, r.top);
+    }
+    // A line of text: the middle of the line, the top of its letters.
+    const el = doc.getElementById(fx.id);
+    if (el && el.dataset.anchorY !== undefined) {
+      const r = el.getBoundingClientRect();
+      return at(r.left + r.width / 2, r.top + (Number(el.dataset.anchorY) - el.offsetTop) * k);
+    }
+    // Anything else: the middle of what can be grabbed.
+    const box = dragBox(doc, fx.id);
+    if (box) return at((box.left + box.right) / 2, (box.top + box.bottom) / 2);
+  } catch { /* no preview yet: it stays at its x / y */ }
+  return out;
 }
 
 // Coalesce bursts of edits — arrow keys on a number box fire one change
@@ -724,7 +796,7 @@ const snap = (v) => Math.round(v / SNAP) * SNAP;
 // the clip as badges; subtitles are a lane at the top. Everything is placed
 // in % of the clip, inside #tl-inner whose width is the zoom.
 let selectedFx = null;
-const FX_FAMILY = { Textes: "text", Animations: "anim", Image: "image" };
+const FX_FAMILY = { Textes: "text", Animations: "anim", Suivi: "track", Image: "image" };
 
 function fxFamily(def) { return FX_FAMILY[def?.category] || "text"; }
 

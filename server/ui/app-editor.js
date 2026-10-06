@@ -295,30 +295,48 @@ function drawHandles() {
   for (const fx of v.effects) {
     const def = state.effects.find((e) => e.type === fx.type);
     if (!def || !def.drag || fx.enabled === false) continue;
+    // Some effects can only be dragged in some modes (a subject that is a
+    // point, not a person or an object).
+    if (def.drag.only) {
+      const f = def.schema.find((x) => x.key === def.drag.key);
+      if (!def.drag.only.includes(String(fx.params[def.drag.key] ?? f?.default))) continue;
+    }
     // Only while it is on screen.
     const start = Number(fx.start) || 0;
     const end = fx.duration == null ? v.duration : start + Number(fx.duration);
     if (p.t < start || p.t > end) continue;
-    const box = dragBox(p.doc, fx.id);
-    if (!box) continue;
-    seen.add(fx.id);
-
-    let h = layer.querySelector(`[data-h="${fx.id}"]`);
-    if (!h) {
-      h = document.createElement("div");
-      h.className = "handle";
-      h.dataset.h = fx.id;
-      h.title = "Glisse pour déplacer · clique pour régler";
-      h.appendChild(document.createElement("span"));
-      h.addEventListener("pointerdown", (e) => startDrag(e, h, fx.id));
-      layer.appendChild(h);
+    // An effect with several points (a route) gets one handle per point.
+    const parts = def.drag.points
+      ? [...p.doc.querySelectorAll(`[data-drag="${fx.id}"][data-drag-pt]`)].map((el) => ({ pt: el.dataset.dragPt, el }))
+      : [{ pt: null }];
+    for (const part of parts) {
+      let box = null;
+      if (part.el) {
+        const r = part.el.getBoundingClientRect();
+        if (r.width || r.height) box = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+      } else {
+        box = dragBox(p.doc, fx.id);
+      }
+      if (!box) continue;
+      const key = part.pt === null ? fx.id : `${fx.id}:${part.pt}`;
+      seen.add(key);
+      let h = layer.querySelector(`[data-h="${key}"]`);
+      if (!h) {
+        h = document.createElement("div");
+        h.className = "handle";
+        h.dataset.h = key;
+        h.title = "Glisse pour déplacer · clique pour régler";
+        h.appendChild(document.createElement("span"));
+        h.addEventListener("pointerdown", (e) => startDrag(e, h, fx.id, part.pt));
+        layer.appendChild(h);
+      }
+      h.querySelector("span").textContent = part.pt === null ? fx.name || def.label : `Point ${Number(part.pt) + 1}`;
+      const pad = part.pt === null ? 4 : 10;
+      h.style.left = ox + box.left * k - pad + "px";
+      h.style.top = oy + box.top * k - pad + "px";
+      h.style.width = (box.right - box.left) * k + pad * 2 + "px";
+      h.style.height = (box.bottom - box.top) * k + pad * 2 + "px";
     }
-    h.querySelector("span").textContent = fx.name || def.label;
-    const pad = 4;
-    h.style.left = ox + box.left * k - pad + "px";
-    h.style.top = oy + box.top * k - pad + "px";
-    h.style.width = (box.right - box.left) * k + pad * 2 + "px";
-    h.style.height = (box.bottom - box.top) * k + pad * 2 + "px";
   }
   for (const h of [...layer.children]) if (!seen.has(h.dataset.h)) h.remove();
 }
@@ -332,7 +350,7 @@ function focusCard(fxId) {
   card.classList.add("flash");
 }
 
-function startDrag(e, handle, fxId) {
+function startDrag(e, handle, fxId, point = null) {
   if (e.button !== 0) return;
   const v = videoById(selected);
   const p = previewDoc();
@@ -354,8 +372,13 @@ function startDrag(e, handle, fxId) {
   // pixels on a stage that is itself scaled onto the canvas.
   const stage = p.doc.getElementById("stage");
   const sk = def.drag.stage && stage ? stage.getBoundingClientRect().width / stage.offsetWidth : 1;
-  // Its scrim, if any, travels with it.
-  const movers = [root, p.doc.getElementById(fxId + "-scrim")].filter(Boolean);
+  // Its scrim, if any, travels with it; a route's point moves alone; an
+  // effect in several layers (a ring in orbit) moves all of them.
+  const movers = point !== null
+    ? [p.doc.getElementById(`${fxId}-m${point}`)].filter(Boolean)
+    : root
+      ? [root, p.doc.getElementById(fxId + "-scrim")].filter(Boolean)
+      : [...p.doc.querySelectorAll(`[id^="${fxId}-"].clip`)];
   const x0 = e.clientX;
   const y0 = e.clientY;
   const left = parseFloat(handle.style.left);
@@ -392,7 +415,39 @@ function startDrag(e, handle, fxId) {
     const cdy = dy / k;
     let params;
     const following = def.drag.offset || (def.drag.follow && fx.params[def.drag.key] === def.drag.follow);
-    if (def.drag.stage && following) {
+    const pinned = def.drag.pin === true || (def.drag.pin && fx.params[def.drag.pinKey || def.drag.key] === def.drag.pin);
+    if (pinned && stage) {
+      // Pinned to the scenery: it is re-pinned where it lands, at this
+      // moment — the spot under it now is the one it will follow. Its
+      // marker says where the spot is at this time (after the camera's
+      // motion), in stage pixels.
+      const marker = p.doc.getElementById(fxId + "-anchor" + (point ?? ""));
+      const sr = stage.getBoundingClientRect();
+      let ax = Number(root?.dataset.anchorX);
+      let ay = Number(root?.dataset.anchorY);
+      if (marker) {
+        const mr = marker.getBoundingClientRect();
+        ax = (mr.left - sr.left) / sk;
+        ay = (mr.top - sr.top) / sk;
+      }
+      const fine = (n) => Math.round(Math.min(100, Math.max(0, n)) * 10) / 10;
+      const suffix = point ?? "";
+      params = {
+        [`x${suffix}`]: fine(((ax + cdx / sk) / stage.offsetWidth) * 100),
+        [`y${suffix}`]: fine(((ay + cdy / sk) / stage.offsetHeight) * 100),
+        [`pinAt${suffix}`]: Math.round(p.t * 1000) / 1000,
+      };
+    } else if (def.drag.stage && def.drag.xy && stage) {
+      // Moves its centre (x / y, % of the source frame) by the drag.
+      const at = (key) => {
+        const f = def.schema.find((x) => x.key === key);
+        return Number(fx.params[key] ?? (f ? f.default : 50));
+      };
+      params = {
+        x: clamp(at("x") + (cdx / sk / stage.offsetWidth) * 100),
+        y: clamp(at("y") + (cdy / sk / stage.offsetHeight) * 100),
+      };
+    } else if (def.drag.stage && following) {
       // It follows someone: the move becomes an offset from that
       // person (% of the source frame), so it keeps following.
       const nudge = (key, d, size) => {
