@@ -204,6 +204,20 @@ test("a gradient and a flat colour need no image", () => {
   assert.match(c.css, /background: #ff0000/);
 });
 
+test("a studio backdrop needs no image, and its light can be dimmed", () => {
+  for (const look of ["light", "dark", "brand"]) {
+    const built = byType("bg-replace").build(replace({ mode: "studio", look }), video());
+    assert.doesNotMatch(built.html, /<img/, look);
+    assert.match(built.css, /background: radial-gradient\(.*linear-gradient\(180deg/, look);
+  }
+  assert.match(byType("bg-replace").build(replace({ mode: "studio", look: "brand" }), video()).css, /var\(--brand-primary\)/);
+  const dim = byType("bg-replace").build(replace({ mode: "studio", light: 0 }), video());
+  assert.match(dim.css, /rgb\(255 255 255 \/ 0\)/);
+  // An unknown look falls back to the light one rather than to nothing.
+  const odd = byType("bg-replace").build(replace({ mode: "studio", look: "x\"};" }), video());
+  assert.match(odd.css, /#ecebe8/);
+});
+
 test("the grade reaches the new background, so it matches the person", () => {
   const html = compose(video([replace(), fx("grade")]), files);
   assert.match(html, /\.footage-layer \{ filter: [^}]*contrast\(/);

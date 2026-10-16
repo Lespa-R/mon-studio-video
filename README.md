@@ -126,7 +126,7 @@ Le menu est classé en trois familles : **Textes**, **Animations**, **Image**.
 | **Sous-titres** | affiche les sous-titres du clip (voir plus bas) |
 | **Étalonnage** | exposition, contraste, saturation, température |
 | **Flou d'arrière-plan** | floute la pièce, te garde net |
-| **Remplacer l'arrière-plan** | remplace la pièce derrière toi par ton image, un dégradé ou une couleur |
+| **Remplacer l'arrière-plan** | remplace la pièce derrière toi par un fond studio, ton image, un dégradé ou une couleur |
 | **Vignettage** | assombrit les coins |
 | **Grain argentique** | texture de pellicule |
 | **Bandes cinéma** | format large 2.39, 2.00… |
@@ -367,6 +367,11 @@ Ajoute l'effet **Remplacer l'arrière-plan**, choisis **Fond : Image**, puis
 **luminosité** un peu baissée rendent le montage plus naturel. Le texte « derrière
 moi » reste devant le nouveau fond mais derrière toi, et l'étalonnage
 s'applique aussi au décor.
+
+**Fond : Studio** pose un plateau photo sans image à fournir : mur, sol, une
+lumière derrière toi et une ombre à tes pieds. Trois **ambiances** : fond papier
+clair, plateau sombre, ou couleur de ta charte ; **Lumière derrière toi** règle
+l'intensité du halo.
 
 > Les contours très fins (cheveux) peuvent garder un léger liseré de la couleur
 > de ta pièce, visible surtout en gros plan sur un fond très différent.
