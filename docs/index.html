@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mon Studio Vidéo</title>
+<meta name="description" content="Ton propre outil de montage, en local sur ton MacBook : couper, sous-titrer, habiller, exporter. Sans abonnement, sans cloud, open source.">
+<meta property="og:title" content="Mon Studio Vidéo — ton banc de montage, sur ton Mac">
+<meta property="og:description" content="Couper, sous-titrer, habiller, exporter. Sans abonnement, sans cloud.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;600&family=Inter+Tight:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0f0f10; --panel: #17171a; --panel2: #1f1f23; --rule: #2c2c31;
+    --paper: #ece8df; --text: #f1efe9; --dim: #8d8b86;
+    --txt: #7b61ff; --anim: #ff4f8b; --img: #19b3a6; --head: #ffb000;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --serif: "Instrument Serif", Georgia, serif;
+    --sans: "Inter Tight", Inter, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--ink); color: var(--text); font: 16px/1.55 var(--sans); -webkit-font-smoothing: antialiased; padding-bottom: 96px; }
+  a { color: inherit; }
+  ::selection { background: var(--head); color: #000; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: var(--mono); }
+  .tc { font: 600 12px var(--mono); letter-spacing: .04em; color: var(--head); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* ---------- top bar ---------- */
+  .top { display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; font: 12px var(--mono); color: var(--dim); border-bottom: 1px solid var(--rule); }
+  .top b { color: var(--text); font-weight: 600; }
+  .top a { text-decoration: none; border: 1px solid var(--rule); padding: 6px 12px; border-radius: 6px; color: var(--text); }
+  .top a:hover { border-color: var(--head); }
+  .rec { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; margin-right: 8px; animation: blink 1.6s steps(2) infinite; vertical-align: 1px; }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  /* ---------- hero ---------- */
+  .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; padding: 64px 0 80px; }
+  .hero h1 { font: 400 clamp(52px, 7.4vw, 104px)/.92 var(--serif); letter-spacing: -0.015em; margin: 0 0 26px; }
+  .hero h1 em { color: var(--head); }
+  .hero .lead { font-size: 19px; color: #c9c6be; max-width: 520px; margin: 0 0 30px; }
+  .hero .lead strong { color: var(--text); font-weight: 600; }
+  .ctas { display: flex; gap: 10px; flex-wrap: wrap; }
+  .key { display: inline-flex; align-items: center; gap: 10px; padding: 13px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; border: 1px solid var(--rule); background: var(--panel); }
+  .key.go { background: var(--text); color: var(--ink); border-color: var(--text); }
+  .key kbd { font: 600 11px var(--mono); border: 1px solid currentColor; border-radius: 4px; padding: 1px 6px; opacity: .55; }
+  .facts { display: flex; gap: 22px; margin-top: 34px; font: 12px var(--mono); color: var(--dim); flex-wrap: wrap; }
+  .facts span::before { content: "■ "; color: var(--img); }
+
+  /* ---------- the playable monitor ---------- */
+  .monitor { background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgb(0 0 0 / .5); }
+  .mbar { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; font: 11px var(--mono); color: var(--dim); border-bottom: 1px solid var(--rule); }
+  .screen { position: relative; aspect-ratio: 16/10; overflow: hidden; background: #000; container-type: inline-size; }
+  .bg { position: absolute; inset: 0; transition: opacity .5s; }
+  /* the original room */
+  .bg.room { background:
+      linear-gradient(90deg, transparent 8%, #3d4a3f 8% 9%, transparent 9%) 0 0 / 100% 100%,
+      linear-gradient(180deg, #8fa7b8 0 0) 7% 12% / 24% 46% no-repeat,
+      linear-gradient(180deg, #5b4a3a 0 0) 64% 30% / 30% 3% no-repeat,
+      linear-gradient(180deg, #a5684a 0 0) 70% 21% / 5% 9% no-repeat,
+      linear-gradient(180deg, #4f6e5a 0 0) 78% 18% / 4% 12% no-repeat,
+      linear-gradient(180deg, #7b5cb0 0 0) 84% 22% / 6% 8% no-repeat,
+      linear-gradient(180deg, #c9b8a0 0%, #b6a48b 62%, #6d5a48 62%, #4c3e31 100%); }
+  .bg.light { background: radial-gradient(ellipse 28% 5% at 50% 97%, rgb(0 0 0 / .26), transparent), radial-gradient(ellipse 45% 40% at 50% 40%, rgb(255 255 255 / .55), transparent 70%), linear-gradient(180deg, #ecebe8 0 45%, #d6d3ce 68%, #c2bfb9); }
+  .bg.dark { background: radial-gradient(ellipse 28% 5% at 50% 97%, rgb(0 0 0 / .5), transparent), radial-gradient(ellipse 45% 40% at 50% 40%, rgb(200 210 230 / .5), transparent 70%), linear-gradient(180deg, #30333a 0 45%, #1f2126 68%, #16171b); }
+  .bg.brand { background: radial-gradient(ellipse 28% 5% at 50% 97%, rgb(0 0 0 / .4), transparent), radial-gradient(ellipse 45% 40% at 50% 40%, rgb(255 255 255 / .4), transparent 70%), linear-gradient(180deg, #ffcf66 0 45%, #ffb000 68%, #9a6a00); }
+  .bg:not(.on) { opacity: 0; }
+  .behind { position: absolute; left: 0; right: 0; top: 13%; text-align: center; font: 800 18cqw/.9 var(--sans); letter-spacing: -0.04em; color: var(--txt); white-space: nowrap; transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .4s; text-transform: uppercase; }
+  .behind.out { transform: translateY(30%); opacity: 0; }
+  .person { position: absolute; left: 50%; bottom: 0; width: 40%; transform: translateX(-50%); filter: drop-shadow(0 0 0 transparent); }
+  .lower { position: absolute; left: 4%; bottom: 8%; background: rgb(15 15 16 / .88); padding: 1.2cqw 2cqw; border-left: .7cqw solid var(--anim); font: 600 2.6cqw/1.25 var(--sans); transition: transform .5s cubic-bezier(.2,.8,.2,1), opacity .4s; }
+  .lower small { display: block; font-weight: 400; color: #bdbab3; }
+  .lower.out { transform: translateX(-115%); opacity: 0; }
+  .subs { position: absolute; left: 0; right: 0; bottom: 4%; text-align: center; font: 600 3.2cqw var(--sans); }
+  .subs span { background: rgb(0 0 0 / .72); padding: .3cqw 1.2cqw; border-radius: .6cqw; }
+  .subs[hidden] { display: none; }
+  .safe { position: absolute; inset: 6%; border: 1px dashed rgb(255 255 255 / .18); pointer-events: none; }
+  .scrub { position: relative; height: 34px; background: var(--panel2); border-top: 1px solid var(--rule); cursor: ew-resize; touch-action: none; }
+  .scrub i { position: absolute; top: 7px; height: 8px; border-radius: 3px; }
+  .scrub .ph { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--head); left: 0; }
+  .scrub .ph::before { content: ""; position: absolute; top: -1px; left: -5px; border: 6px solid transparent; border-top-color: var(--head); }
+  .controls { padding: 14px; display: grid; gap: 12px; border-top: 1px solid var(--rule); }
+  .ctl { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 12px; font-size: 13px; }
+  .ctl label { font: 11px var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .ctl input[type=text] { background: var(--ink); border: 1px solid var(--rule); color: var(--text); border-radius: 6px; padding: 8px 10px; font: 600 14px var(--sans); text-transform: uppercase; width: 100%; }
+  .ctl input[type=text]:focus { outline: none; border-color: var(--txt); }
+  .seg { display: flex; gap: 4px; flex-wrap: wrap; }
+  .seg button { background: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--dim); }
+  .seg button[aria-pressed=true] { color: var(--text); border-color: var(--text); }
+  .hint { font: 11px var(--mono); color: var(--dim); padding: 0 14px 12px; }
+
+  /* ---------- chapters ---------- */
+  .chap { padding: 110px 0 40px; border-top: 1px solid var(--rule); }
+  .slate { display: flex; gap: 18px; align-items: baseline; font: 12px var(--mono); color: var(--dim); margin-bottom: 18px; }
+  .slate b { color: var(--head); font-weight: 600; }
+  .chap h2 { font: 400 clamp(40px, 5.6vw, 76px)/.95 var(--serif); margin: 0 0 22px; letter-spacing: -0.01em; max-width: 900px; }
+  .chap h2 em { color: var(--head); }
+  .chap .say { color: #c9c6be; font-size: 18px; max-width: 620px; margin: 0 0 48px; }
+
+  /* the basics as a real timeline */
+  .basics { border: 1px solid var(--rule); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .ruler { display: grid; grid-template-columns: repeat(6, 1fr); font: 11px var(--mono); color: var(--dim); border-bottom: 1px solid var(--rule); }
+  .ruler span { padding: 6px 10px; border-left: 1px solid var(--rule); }
+  .ruler span:first-child { border-left: 0; }
+  .lanes { display: grid; grid-template-columns: repeat(6, 1fr); }
+  .step { border-left: 1px solid var(--rule); padding: 18px 16px 22px; position: relative; min-height: 210px; transition: background .25s; }
+  .step:first-child { border-left: 0; }
+  .step:hover { background: var(--panel2); }
+  .step .clip { height: 10px; border-radius: 3px; margin-bottom: 16px; }
+  .step h3 { font: 600 18px var(--sans); margin: 0 0 6px; }
+  .step p { margin: 0; color: var(--dim); font-size: 14px; }
+  .step kbd { position: absolute; bottom: 14px; left: 16px; font: 11px var(--mono); color: var(--dim); }
+
+  /* text-based cut */
+  .cut { display: grid; grid-template-columns: 1.3fr 1fr; gap: 40px; align-items: start; }
+  .transcript { background: var(--paper); color: #1b1a17; border-radius: 12px; padding: 30px 32px; font: 400 clamp(22px, 2.6vw, 32px)/1.45 var(--serif); }
+  .w { cursor: pointer; border-radius: 4px; padding: 0 2px; transition: background .15s, color .15s; }
+  .w:hover { background: rgb(0 0 0 / .08); }
+  .w.filler { color: #b0412e; }
+  .w.cutw { text-decoration: line-through; text-decoration-thickness: 2px; color: #a19c90; background: rgb(176 65 46 / .1); }
+  .readout { font: 13px var(--mono); color: var(--dim); display: grid; gap: 14px; }
+  .big { font: 400 64px/1 var(--serif); color: var(--text); }
+  .bar2 { height: 12px; border-radius: 3px; background: var(--rule); overflow: hidden; display: flex; }
+  .bar2 i { display: block; height: 100%; background: var(--img); transition: flex-grow .3s; }
+  .bar2 i.gone { background: transparent; }
+  .linkbtn { background: none; border: 1px solid var(--rule); border-radius: 6px; padding: 8px 12px; font: 12px var(--mono); color: var(--text); justify-self: start; }
+
+  /* local */
+  .local { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+  .mac { position: relative; border: 1px solid var(--rule); border-radius: 14px 14px 4px 4px; padding: 18px; background: var(--panel); }
+  .mac::after { content: ""; position: absolute; left: -6%; right: -6%; bottom: -16px; height: 14px; border-radius: 0 0 14px 14px; background: linear-gradient(#2a2a2e, #1a1a1d); }
+  .proc { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; font: 13px var(--mono); }
+  .proc span:nth-child(even) { color: var(--img); }
+  .meter { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--rule); display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--dim); }
+  .meter b { color: var(--head); font-size: 22px; font-weight: 600; }
+  .vs { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .vs li { display: grid; grid-template-columns: 1fr 90px 90px; padding: 14px 0; border-bottom: 1px solid var(--rule); font-size: 15px; }
+  .vs li:first-child { font: 11px var(--mono); color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .vs li span:not(:first-child) { text-align: center; font-family: var(--mono); }
+  .yes { color: var(--img); } .no { color: #6b6964; }
+
+  /* effects strip */
+  .fxstrip { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fx { border-radius: 4px; padding: 7px 12px; font-size: 14px; border: 1px solid; cursor: default; transition: transform .15s; }
+  .fx:hover { transform: translateY(-2px); }
+  .fx.t { border-color: var(--txt); color: #c3b6ff; } .fx.a { border-color: var(--anim); color: #ffb3cd; }
+  .fx.s { border-color: var(--head); color: #ffd68a; } .fx.i { border-color: var(--img); color: #8fe3da; }
+
+  /* install */
+  .term { background: #0a0a0b; border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; }
+  .term .mbar { background: var(--panel); }
+  .term pre { margin: 0; padding: 22px; min-height: 180px; font: 14px/1.8 var(--mono); color: #d7d4cc; white-space: pre-wrap; }
+  .term .p { color: var(--img); } .term .ok { color: var(--head); }
+  .caret { display: inline-block; width: 8px; height: 1.1em; background: var(--text); vertical-align: -3px; animation: blink 1s steps(2) infinite; }
+  .copy { background: none; border: 1px solid var(--rule); border-radius: 5px; padding: 3px 9px; font: 11px var(--mono); color: var(--text); }
+  .req { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; font: 13px var(--mono); }
+  .req div { border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; color: var(--dim); }
+  .req b { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+
+  footer { padding: 70px 0 40px; border-top: 1px solid var(--rule); margin-top: 110px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; font: 12px var(--mono); color: var(--dim); }
+  .end { font: 400 clamp(40px, 6vw, 80px)/1 var(--serif); color: var(--text); margin: 0 0 8px; }
+
+  /* ---------- the page timeline (bottom) ---------- */
+  .tl { position: fixed; left: 0; right: 0; bottom: 0; height: 76px; background: rgb(23 23 26 / .96); backdrop-filter: blur(10px); border-top: 1px solid var(--rule); z-index: 20; display: grid; grid-template-columns: 150px 1fr; }
+  .tl .tcbox { display: grid; place-content: center; border-right: 1px solid var(--rule); text-align: center; }
+  .tl .tcbox .tc { font-size: 15px; }
+  .tl .tcbox small { font: 10px var(--mono); color: var(--dim); }
+  .track { position: relative; margin: 10px 16px; cursor: pointer; }
+  .track .seg2 { position: absolute; top: 8px; height: 22px; border-radius: 4px; font: 11px var(--sans); padding: 3px 8px; white-space: nowrap; overflow: hidden; color: #fff; opacity: .55; transition: opacity .2s; }
+  .track .seg2.now { opacity: 1; }
+  .track .wave { position: absolute; left: 0; right: 0; bottom: 4px; height: 14px; background: repeating-linear-gradient(90deg, rgb(25 179 166 / .55) 0 2px, transparent 2px 5px); -webkit-mask: linear-gradient(90deg, #000 0 15%, rgb(0 0 0 / .35) 15% 22%, #000 22% 64%, rgb(0 0 0 / .5) 64% 72%, #000 72%); mask: linear-gradient(90deg, #000 0 15%, rgb(0 0 0 / .35) 15% 22%, #000 22% 64%, rgb(0 0 0 / .5) 64% 72%, #000 72%); }
+  .track .ph { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--head); left: 0; pointer-events: none; }
+  .track .ph::before { content: ""; position: absolute; top: 0; left: -6px; border: 7px solid transparent; border-top-color: var(--head); }
+
+  @media (max-width: 900px) {
+    .hero, .cut, .local { grid-template-columns: 1fr; gap: 40px; }
+    .lanes, .ruler { grid-template-columns: repeat(2, 1fr); }
+    .ruler span:nth-child(n+3) { display: none; }
+    .step { border-top: 1px solid var(--rule); }
+    .req { grid-template-columns: 1fr; }
+    .tl { grid-template-columns: 112px 1fr; }
+    .tl .tcbox .tc { font-size: 12px; }
+    .track .seg2 { font-size: 0; }
+  }
+  @media (max-width: 520px) { .ctl { grid-template-columns: 1fr; gap: 6px; } .vs li { grid-template-columns: 1fr 64px 64px; font-size: 14px; } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="person" viewBox="0 0 200 220">
+    <path fill="#1d1d21" d="M100 18c25 0 42 19 42 44 0 18-8 33-20 40v10c32 6 66 22 74 60l4 48H0l4-48c8-38 42-54 74-60v-10C66 95 58 80 58 62c0-25 17-44 42-44z"/>
+  </symbol>
+</svg>
+
+<div class="top">
+  <span><span class="rec"></span><b>Mon Studio Vidéo</b> &nbsp;·&nbsp; projet open source</span>
+  <a href="https://github.com/Lespa-R/mon-studio-video">Code source ↗</a>
+</div>
+
+<main class="wrap">
+
+  <!-- 00 — hero -->
+  <section class="hero" id="c0" data-chap="Ouverture">
+    <div>
+      <div class="slate"><b>SCÈNE 00</b><span>PRISE 1</span><span>LE BANC</span></div>
+      <h1>Ton propre outil de montage. <em>Sur ton Mac.</em></h1>
+      <p class="lead">Couper, sous-titrer, habiller, exporter : <strong>le montage de base, sans abonnement ni cloud</strong>. Un studio qui s'installe en deux commandes et tourne entièrement sur ton MacBook. Tes rushs ne le quittent jamais.</p>
+      <div class="ctas">
+        <a class="key go" href="#c4">Installer <kbd>⌘I</kbd></a>
+        <a class="key" href="https://github.com/Lespa-R/mon-studio-video">Lire le code <kbd>⌘E</kbd></a>
+      </div>
+      <div class="facts"><span>macOS</span><span>0 dépendance npm</span><span>0 octet envoyé</span><span>MP4 16:9 · 9:16 · 4:5</span></div>
+    </div>
+
+    <div class="monitor" id="monitor">
+      <div class="mbar"><span>VISIONNEUSE — essaie-la</span><span class="tc" id="mtc">00:00:00:00</span></div>
+      <div class="screen" id="screen">
+        <div class="bg room on" data-bg="room"></div>
+        <div class="bg light" data-bg="light"></div>
+        <div class="bg dark" data-bg="dark"></div>
+        <div class="bg brand" data-bg="brand"></div>
+        <div class="behind out" id="behind">Bonjour</div>
+        <svg class="person" viewBox="0 0 200 220" aria-hidden="true"><use href="#person"/></svg>
+        <div class="lower out" id="lower">Ton nom<small>Ce que tu fais</small></div>
+        <div class="subs" id="subs" hidden><span id="subline">Aujourd'hui, je vous montre mon studio.</span></div>
+        <div class="safe"></div>
+      </div>
+      <div class="scrub" id="scrub" aria-label="Tête de lecture">
+        <i style="left:6%;width:52%;background:var(--txt)"></i>
+        <i style="left:34%;width:50%;background:var(--anim);top:19px"></i>
+        <div class="ph" id="mph"></div>
+      </div>
+      <div class="controls">
+        <div class="ctl"><label for="word">Texte derrière toi</label><input type="text" id="word" value="Bonjour" maxlength="12" autocomplete="off" spellcheck="false"></div>
+        <div class="ctl"><label>Arrière-plan</label>
+          <div class="seg" id="bgs">
+            <button aria-pressed="true" data-v="room">Ta pièce</button>
+            <button aria-pressed="false" data-v="light">Studio clair</button>
+            <button aria-pressed="false" data-v="dark">Studio sombre</button>
+            <button aria-pressed="false" data-v="brand">Ta charte</button>
+          </div></div>
+        <div class="ctl"><label>Sous-titres</label>
+          <div class="seg" id="subt"><button aria-pressed="false" data-v="on">Afficher</button></div></div>
+      </div>
+      <div class="hint">Glisse sur la barre pour te déplacer · <span class="mono">Espace</span> lecture / pause</div>
+    </div>
+  </section>
+
+  <!-- 01 — basics -->
+  <section class="chap" id="c1" data-chap="Les bases">
+    <div class="slate"><b>SCÈNE 01</b><span>LE MONTAGE DE BASE</span></div>
+    <h2>Tout ce qu'un plan face caméra demande. <em>Rien de plus.</em></h2>
+    <p class="say">Pas une usine à gaz : six gestes, dans l'ordre où tu les fais. L'interface reprend les habitudes de Final Cut Pro (bibliothèque, visionneuse, inspecteur, timeline, mêmes raccourcis).</p>
+    <div class="basics">
+      <div class="ruler"><span>00:00</span><span>00:05</span><span>00:10</span><span>00:15</span><span>00:20</span><span>00:25</span></div>
+      <div class="lanes">
+        <div class="step"><div class="clip" style="background:var(--img)"></div><h3>Importer</h3><p>Glisse tes vidéos. Le studio détecte ton visage et découpe ta silhouette.</p><kbd>⌘I</kbd></div>
+        <div class="step"><div class="clip" style="background:var(--img);width:70%"></div><h3>Rogner</h3><p>Le début et la fin, à la poignée. L'original est gardé.</p><kbd>✂</kbd></div>
+        <div class="step"><div class="clip" style="background:linear-gradient(90deg,var(--img) 0 40%,transparent 40% 52%,var(--img) 52%)"></div><h3>Couper dans le texte</h3><p>Barre un mot de la transcription, le passage disparaît de la vidéo.</p><kbd>⌫</kbd></div>
+        <div class="step"><div class="clip" style="background:#e9e6df"></div><h3>Sous-titrer</h3><p>Transcription locale avec Whisper, corrigeable ligne par ligne, export SRT.</p><kbd>Whisper</kbd></div>
+        <div class="step"><div class="clip" style="background:linear-gradient(90deg,var(--txt) 0 50%,var(--anim) 50%)"></div><h3>Habiller</h3><p>Titres, bandeaux, texte derrière toi, fond studio, étalonnage.</p><kbd>⌘5</kbd></div>
+        <div class="step"><div class="clip" style="background:var(--head)"></div><h3>Exporter</h3><p>Un MP4 au format de ton choix : 16:9, vertical, carré ou 4:5.</p><kbd>⌘E</kbd></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 — text cut -->
+  <section class="chap" id="c2" data-chap="Couper">
+    <div class="slate"><b>SCÈNE 02</b><span>MONTAGE PAR LE TEXTE</span></div>
+    <h2>Monter comme on corrige <em>un texte.</em></h2>
+    <p class="say">Clique sur les mots à enlever. Dans le studio, la vidéo suit : les coupes tombent dans les silences, avec un fondu de son de 10 ms.</p>
+    <div class="cut">
+      <div class="transcript" id="transcript"></div>
+      <div class="readout">
+        <span>DURÉE DU CLIP</span>
+        <div class="big" id="dur">0,0 s</div>
+        <div class="bar2" id="bar2"></div>
+        <span id="saved">Clique sur les mots en rouge.</span>
+        <button class="linkbtn" id="fillers">Retirer toutes les hésitations</button>
+        <button class="linkbtn" id="reset">Tout remettre</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 — local -->
+  <section class="chap" id="c3" data-chap="En local">
+    <div class="slate"><b>SCÈNE 03</b><span>CHEZ TOI</span></div>
+    <h2>Ton outil. Ta machine. <em>Tes fichiers.</em></h2>
+    <p class="say">Pas de compte, pas de file d'attente, pas de filigrane. La découpe, la transcription et le rendu tournent sur la puce de ton Mac, avec des outils ouverts.</p>
+    <div class="local">
+      <div class="mac">
+        <div class="proc">
+          <span>Découpe de la silhouette · Vision</span><span>local</span>
+          <span>Objet choisi · SAM 2</span><span>local</span>
+          <span>Transcription · Whisper</span><span>local</span>
+          <span>Découpage en plans · PySceneDetect</span><span>local</span>
+          <span>Rendu · HyperFrames + ffmpeg</span><span>local</span>
+        </div>
+        <div class="meter"><span>Ce que le studio envoie en ligne</span><b>0 octet</b></div><div class="meter" style="border-top:0;padding-top:4px;margin-top:0"><span>Il n'écoute que sur</span><b style="font-size:14px">127.0.0.1</b></div>
+      </div>
+      <ul class="vs">
+        <li><span></span><span>Ce studio</span><span>En ligne</span></li>
+        <li><span>Rushs envoyés sur un serveur</span><span class="yes">non</span><span class="no">oui</span></li>
+        <li><span>Abonnement</span><span class="yes">aucun</span><span class="no">mensuel</span></li>
+        <li><span>Fonctionne hors connexion</span><span class="yes">oui</span><span class="no">non</span></li>
+        <li><span>Code lisible et modifiable</span><span class="yes">oui</span><span class="no">non</span></li>
+        <li><span>Filigrane à l'export</span><span class="yes">jamais</span><span class="no">parfois</span></li>
+      </ul>
+    </div>
+    <div style="margin-top:64px">
+      <div class="slate"><span>ET POUR ALLER PLUS LOIN · UNE QUARANTAINE D'EFFETS</span></div>
+      <div class="fxstrip">
+        <span class="fx t">Texte derrière moi</span><span class="fx t">Titre devant</span><span class="fx t">Bandeau</span><span class="fx t">Citation</span><span class="fx t">Sous-titres</span><span class="fx t">Titre surligné</span>
+        <span class="fx a">Compteur animé</span><span class="fx a">Flèche animée</span><span class="fx a">Notification</span><span class="fx a">Réaction emoji</span><span class="fx a">Titre de chapitre</span><span class="fx a">Transition balayage</span>
+        <span class="fx s">Projecteur</span><span class="fx s">Texte en orbite</span><span class="fx s">Repère dans le décor</span><span class="fx s">Recadrage qui suit</span><span class="fx s">Stabilisation</span><span class="fx s">Flouter un visage</span>
+        <span class="fx i">Fond studio</span><span class="fx i">Flou d'arrière-plan</span><span class="fx i">Étalonnage</span><span class="fx i">Grain argentique</span><span class="fx i">Bandes cinéma</span><span class="fx i">Fondus</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 — install -->
+  <section class="chap" id="c4" data-chap="Installer">
+    <div class="slate"><b>SCÈNE 04</b><span>DERNIÈRE PRISE</span></div>
+    <h2>Deux commandes. <em>Aucun npm install.</em></h2>
+    <p class="say">Le lanceur vérifie ce qu'il faut et te dit quoi installer s'il manque quelque chose, puis ouvre le studio dans ton navigateur.</p>
+    <div class="term">
+      <div class="mbar"><span>Terminal — zsh</span><button class="copy" id="copy">Copier</button></div>
+      <pre id="termtext"></pre>
+    </div>
+    <div class="req">
+      <div><b>Node.js 22+</b>brew install node</div>
+      <div><b>ffmpeg</b>brew install ffmpeg</div>
+      <div><b>Outils Xcode</b>xcode-select --install</div>
+    </div>
+  </section>
+
+  <footer>
+    <div>
+      <p class="end">Coupé. <em style="color:var(--head)">On la garde.</em></p>
+      <span>Mon Studio Vidéo · par <a href="https://github.com/Lespa-R">Robin Lespagnol</a></span>
+    </div>
+    <span><a href="https://github.com/Lespa-R/mon-studio-video">GitHub</a> · <a href="https://github.com/Lespa-R/mon-studio-video#readme">Mode d'emploi</a></span>
+  </footer>
+</main>
+
+<!-- the page's own timeline -->
+<div class="tl" aria-label="Chapitres de la page">
+  <div class="tcbox"><span class="tc" id="ptc">00:00:00:00</span><small id="pname">Ouverture</small></div>
+  <div class="track" id="track"><div class="wave"></div><div class="ph" id="pph"></div></div>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const FPS = 25;
+  const tc = (sec) => {
+    const f = Math.floor(sec * FPS);
+    const p = (n) => String(n).padStart(2, "0");
+    return `${p(Math.floor(f / (3600 * FPS)))}:${p(Math.floor(f / (60 * FPS)) % 60)}:${p(Math.floor(f / FPS) % 60)}:${p(f % FPS)}`;
+  };
+
+  // ---------- the monitor ----------
+  const LEN = 8; // seconds in the demo clip
+  let t = 0, playing = true, last = performance.now();
+  const behind = $("#behind"), lower = $("#lower"), mph = $("#mph"), mtc = $("#mtc");
+  const draw = () => {
+    mph.style.left = (t / LEN * 100) + "%";
+    mtc.textContent = tc(t);
+    behind.classList.toggle("out", !(t > 0.5 && t < 4.6));
+    lower.classList.toggle("out", !(t > 2.7 && t < 6.7));
+  };
+  const loop = (now) => {
+    if (playing) t = (t + (now - last) / 1000) % LEN;
+    last = now; draw(); requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+
+  const scrub = $("#scrub");
+  const seek = (e) => { const r = scrub.getBoundingClientRect(); t = Math.min(LEN - 0.01, Math.max(0, (e.clientX - r.left) / r.width * LEN)); };
+  scrub.addEventListener("pointerdown", (e) => { playing = false; scrub.setPointerCapture(e.pointerId); seek(e); });
+  scrub.addEventListener("pointermove", (e) => { if (scrub.hasPointerCapture(e.pointerId)) seek(e); });
+  scrub.addEventListener("pointerup", () => { playing = true; });
+  document.addEventListener("keydown", (e) => {
+    if (e.code === "Space" && e.target.tagName !== "INPUT") { e.preventDefault(); playing = !playing; }
+  });
+
+  $("#word").addEventListener("input", (e) => {
+    behind.textContent = e.target.value.trim() || " ";
+    if (t < 0.6 || t > 4.5) t = 0.6; // show it right away
+  });
+  const press = (group, btn) => group.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b === btn));
+  $("#bgs").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    press($("#bgs"), b);
+    document.querySelectorAll(".bg").forEach((el) => el.classList.toggle("on", el.dataset.bg === b.dataset.v));
+  });
+  $("#subt").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    const on = b.getAttribute("aria-pressed") !== "true";
+    b.setAttribute("aria-pressed", on); b.textContent = on ? "Masquer" : "Afficher";
+    $("#subs").hidden = !on; lower.style.bottom = on ? "16%" : "";
+  });
+
+  // ---------- text cut ----------
+  const WORDS = [["Alors", .3], ["euh", .6, 1], ["aujourd'hui,", .5], ["je", .15], ["vous", .2], ["montre", .35], ["euh…", .9, 1], ["mon", .2], ["studio", .4], ["de", .1], ["montage.", .5], ["Enfin,", .4, 1], ["voilà,", .5, 1], ["il", .1], ["tourne", .3], ["sur", .15], ["mon", .2], ["Mac,", .4], ["genre", .45, 1], ["sans", .25], ["rien", .3], ["envoyer", .4], ["en", .1], ["ligne.", .5]];
+  const cut = new Set();
+  const total = WORDS.reduce((a, w) => a + w[1], 0);
+  const tx = $("#transcript"), bar = $("#bar2");
+  WORDS.forEach(([w, d, filler], i) => {
+    const s = document.createElement("span");
+    s.className = "w" + (filler ? " filler" : ""); s.textContent = w; s.dataset.i = i;
+    tx.append(s, " ");
+    const seg = document.createElement("i"); seg.style.flexGrow = d; bar.append(seg);
+  });
+  const fmt = (n) => n.toFixed(1).replace(".", ",") + " s";
+  const update = () => {
+    const kept = WORDS.reduce((a, w, i) => a + (cut.has(i) ? 0 : w[1]), 0);
+    $("#dur").textContent = fmt(kept);
+    tx.querySelectorAll(".w").forEach((s) => s.classList.toggle("cutw", cut.has(+s.dataset.i)));
+    [...bar.children].forEach((seg, i) => seg.classList.toggle("gone", cut.has(i)));
+    $("#saved").textContent = cut.size ? `${cut.size} passage${cut.size > 1 ? "s" : ""} coupé${cut.size > 1 ? "s" : ""} · ${fmt(total - kept)} en moins` : "Clique sur les mots en rouge.";
+  };
+  tx.addEventListener("click", (e) => {
+    const s = e.target.closest(".w"); if (!s) return;
+    const i = +s.dataset.i; cut.has(i) ? cut.delete(i) : cut.add(i); update();
+  });
+  $("#fillers").onclick = () => { WORDS.forEach((w, i) => w[2] && cut.add(i)); update(); };
+  $("#reset").onclick = () => { cut.clear(); update(); };
+  update();
+
+  // ---------- terminal that types itself when reached ----------
+  const LINES = [
+    ["p", "~ $ "], ["", "git clone https://github.com/Lespa-R/mon-studio-video.git\n"],
+    ["p", "~ $ "], ["", "cd mon-studio-video && npm run studio\n"],
+    ["ok", "✓ Node 22 · ffmpeg · outils Xcode\n"],
+    ["ok", "✓ Studio prêt sur http://localhost:3002\n"],
+  ];
+  const pre = $("#termtext");
+  let typed = false;
+  const typeIt = async () => {
+    if (typed) return; typed = true;
+    const caret = document.createElement("span"); caret.className = "caret";
+    for (const [cls, text] of LINES) {
+      const span = document.createElement("span"); if (cls) span.className = cls;
+      pre.append(span); pre.append(caret);
+      const slow = !cls;
+      for (const ch of text) { span.textContent += ch; await new Promise((r) => setTimeout(r, slow ? 22 : 4)); }
+      if (cls === "ok") await new Promise((r) => setTimeout(r, 350));
+    }
+  };
+  new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && typeIt()), { threshold: .4 }).observe($(".term"));
+  $("#copy").onclick = async () => {
+    try { await navigator.clipboard.writeText("git clone https://github.com/Lespa-R/mon-studio-video.git\ncd mon-studio-video && npm run studio"); $("#copy").textContent = "Copié ✓"; }
+    catch { $("#copy").textContent = "Sélectionne le texte"; }
+    setTimeout(() => ($("#copy").textContent = "Copier"), 1800);
+  };
+
+  // ---------- the page timeline: scroll = playhead ----------
+  const chaps = [...document.querySelectorAll("[data-chap]")];
+  const track = $("#track"), pph = $("#pph");
+  const COLORS = ["var(--head)", "var(--img)", "var(--txt)", "var(--anim)", "#e9e6df"];
+  const PAGE_SECONDS = 92; // the page "lasts" a minute and a half
+  const layout = () => {
+    track.querySelectorAll(".seg2").forEach((n) => n.remove());
+    const H = document.documentElement.scrollHeight - innerHeight;
+    chaps.forEach((c, i) => {
+      const a = Math.min(1, c.offsetTop / H), b = i + 1 < chaps.length ? Math.min(1, chaps[i + 1].offsetTop / H) : 1;
+      const s = document.createElement("div");
+      s.className = "seg2"; s.textContent = c.dataset.chap;
+      s.style.left = (a * 100) + "%"; s.style.width = `calc(${(b - a) * 100}% - 3px)`;
+      s.style.background = COLORS[i % COLORS.length];
+      s.style.color = i === 0 || i === 4 ? "#000" : "#fff";
+      s.onclick = (e) => { e.stopPropagation(); c.scrollIntoView(); };
+      track.insertBefore(s, pph);
+    });
+    onScroll();
+  };
+  const onScroll = () => {
+    const H = document.documentElement.scrollHeight - innerHeight;
+    const k = H > 0 ? Math.min(1, scrollY / H) : 0;
+    pph.style.left = (k * 100) + "%";
+    $("#ptc").textContent = tc(k * PAGE_SECONDS);
+    let cur = 0; chaps.forEach((c, i) => { if (scrollY + innerHeight * .4 >= c.offsetTop) cur = i; });
+    $("#pname").textContent = chaps[cur].dataset.chap;
+    track.querySelectorAll(".seg2").forEach((s, i) => s.classList.toggle("now", i === cur));
+  };
+  track.addEventListener("click", (e) => {
+    const r = track.getBoundingClientRect();
+    scrollTo({ top: (e.clientX - r.left) / r.width * (document.documentElement.scrollHeight - innerHeight) });
+  });
+  addEventListener("scroll", onScroll, { passive: true });
+  addEventListener("resize", layout);
+  addEventListener("load", layout);
+  layout();
+})();
+</script>
+</body>
+</html>
