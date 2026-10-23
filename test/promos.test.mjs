@@ -127,3 +127,12 @@ test("the line style and its scenes survive normalisation", () => {
   assert.equal(normaliseStoryboard({ style: "board" }).style, "board");
   assert.equal(normaliseStoryboard({ style: "chart" }).style, "chart");
 });
+
+test("the creative brief survives the studio's edits, cleaned", () => {
+  const sb = normaliseStoryboard({
+    brief: { style: "line", angle: " Manifeste ", show: ["Avis clients", 3, ""], "bad key": "x", empty: "", nested: { a: 1 } },
+  });
+  assert.deepEqual(sb.brief, { style: "line", angle: "Manifeste", show: ["Avis clients"] });
+  assert.equal(normaliseStoryboard({ brief: "texte" }).brief, undefined);
+  assert.equal(normaliseStoryboard({}).brief, undefined);
+});
